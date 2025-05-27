@@ -52,6 +52,10 @@ class TranscriptionProcessor:
             #return self.transcriptions.get(request_id, "NOT_AVAILABLE")
             return self.transcriptions.get(request_id)
 
+    def clear_transcriptions(self):
+        with self.transcriptions_lock:
+            self.transcriptions.clear()
+
     def _process_queue(self):
         """Background worker to process items from the queue."""
         while True:
@@ -91,6 +95,7 @@ class TranscriptionProcessor:
                     # Store the transcription in a thread-safe manner
                     with self.transcriptions_lock:
                         self.transcriptions[str(request_id)] = transcription_text
+                        # TODO: implement code for appending to outputfile on the server
 
                     #print(self.transcriptions)
 

@@ -177,14 +177,31 @@ const App = () => {
         }
     };
 
+    const resetServerData = async () => {
+        setTranscriptions([]);
+        fetch(`http://localhost:8000/reset-data/`, {
+            method: "GET",
+            credentials: "include",
+            headers: {
+                "X-CSRFToken": csrfToken,
+            },
+        })
+            .catch(error => {
+                console.error('Error resetting server data:', error);
+            });
+    }
+
     return (
-        <div>
+        <div className='App'>
             <h1>Dictaphone prototype</h1>
             <button onClick={startRecording} disabled={recording}>
                 Start Recording
             </button>
             <button onClick={stopRecording} disabled={!recording}>
                 Stop Recording
+            </button>
+            <button onClick={resetServerData}>
+                Reset server data
             </button>
             <textarea
                 readOnly

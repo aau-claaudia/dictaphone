@@ -13,6 +13,12 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+.App {
+  max-width: 1000px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 a {
   font-weight: 500;
   color: #646cff;
@@ -23,11 +29,7 @@ a:hover {
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+
 }
 
 h1 {
@@ -45,6 +47,7 @@ button {
   background-color: #1a1a1a;
   cursor: pointer;
   transition: border-color 0.25s;
+  margin-right: 2%;
 }
 button:hover {
   border-color: #646cff;

@@ -6,11 +6,11 @@ from django.http import JsonResponse, HttpResponse, Http404
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
-
 from backend.settings import transcription_processor
 from .serializers import FileUploadSerializer, MultipleRequestIdJsonSerializer, RequestIdJsonSerializer
 from django.http import HttpResponse
 from django.http.response import JsonResponse
+from django.conf import settings
 
 
 def index(request):
@@ -64,3 +64,21 @@ class GetTranscriptionsView(APIView):
                 return JsonResponse(response)
             return Response(serializer.errors, status=400)
         return Response({'error': 'No requestId data provided'}, status=400)
+
+
+def reset_data(request):
+    # clear the transcription texts
+    transcription_processor.clear_transcriptions()
+    # delete the audio files
+    directory_path: str = os.path.join(settings.MEDIA_ROOT, 'UPLOADS')
+    clean_dir(directory_path)
+
+    return HttpResponse("Server data deleted.", status=200)
+
+def clean_dir(directory):
+    for item in os.listdir(directory):
+        source_path = os.path.join(directory, item)
+        # Check if the item is a file (not a directory)
+        if os.path.isfile(source_path):
+            os.remove(source_path)
+            print(f"Removed file: {source_path}")
