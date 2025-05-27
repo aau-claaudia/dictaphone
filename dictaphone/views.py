@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from pathlib import Path
 from django.http import JsonResponse, HttpResponse, Http404
 from rest_framework.views import APIView
@@ -7,7 +8,7 @@ from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 
 from backend.settings import transcription_processor
-from .serializers import FileUploadSerializer
+from .serializers import FileUploadSerializer, MultipleRequestIdJsonSerializer, RequestIdJsonSerializer
 from django.http import HttpResponse
 from django.http.response import JsonResponse
 
@@ -38,12 +39,28 @@ class FileUploadView(APIView):
         else:
             return Response("No upload data.", status=400)
 
-def get_transcription(request, request_id):
-    #print(f"Requesting transcription for id = {request_id}")
-    transcription = transcription_processor.get_transcription(request_id)
-    response = {
-        'transcription': transcription
-    }
-    #print("Returning response: ")
-    #print(response)
-    return JsonResponse(response)
+
+class GetTranscriptionsView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        request_id_json = request.data.get('request_ids')
+        if request_id_json:
+            request_id_json_data = json.loads(request_id_json)
+            print(request_id_json_data)
+            serializer = MultipleRequestIdJsonSerializer(data={'requests': request_id_json_data})
+            if serializer.is_valid():
+                response = {}
+                responses = []
+                requests_meta_data = serializer.validated_data['requests']
+                for request_id in requests_meta_data:
+                    print(f"Serialized request_id: {request_id}")
+                    transcription = transcription_processor.get_transcription(request_id.get('request_id'))
+                    responses.append({
+                        'request_id': request_id.get('request_id'),
+                        'transcription_text': transcription
+                    })
+                    response['transcriptions'] = responses
+                return JsonResponse(response)
+            return Response(serializer.errors, status=400)
+        return Response({'error': 'No requestId data provided'}, status=400)

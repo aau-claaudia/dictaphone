@@ -16,11 +16,11 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from dictaphone.views import index, FileUploadView, get_transcription
+from dictaphone.views import index, FileUploadView, GetTranscriptionsView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('upload-audio-chunk/', FileUploadView.as_view(), name="upload_audio_chunk"),
-    path('get-transcription/<str:request_id>/', get_transcription, name="get_transcription"),
+    path('get-transcriptions/', GetTranscriptionsView.as_view(), name="get_transcriptions"),
     path('', index, name='index'),  # Example route
 ]

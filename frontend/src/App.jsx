@@ -8,6 +8,7 @@ await register(await connect());
 const App = () => {
     const [recording, setRecording] = useState(false);
     const [mediaRecorder, setMediaRecorder] = useState(null);
+    const [intervalId, setIntervalId] = useState(null);
     const [requestIds, setRequestIds] = useState([]); // Store request IDs
     const requestIdsRef = useRef(requestIds);
     const [transcriptions, setTranscriptions] = useState([]); // Store transcriptions
@@ -70,7 +71,7 @@ const App = () => {
                         });
                         if (response.ok) {
                             const queueRequestData = await response.json();
-                            console.log(queueRequestData);
+                            console.debug(queueRequestData);
                             // Add the request ID to the state
                             setRequestIds((prevIds) => [...prevIds, queueRequestData.request_id]);
                         }
@@ -80,10 +81,17 @@ const App = () => {
                     }
                 }
             };
-            // TODO: fitting interval?
+            // TODO: fitting interval? (should interval be configurable from the UI through a setting?)
             recorder.start(10000); // Emit data every 10 seconds
             setMediaRecorder(recorder);
             setRecording(true);
+            // schedule poll function for transcription texts
+            console.debug("Scheduling poll function.");
+            //requestIds.length > 0 ? setTimeout(() => pollTranscriptions(requestIdsRef.current, removeRequestId), 15000) : console.log("No transcription request ids to poll.")
+            //setIntervalId( setInterval(pollTranscriptions(requestIdsRef.current, removeRequestId), 5000) )
+            let id = setInterval(pollTranscriptions, 5000);
+            console.debug("Interval id from setInterval: " + id);
+            setIntervalId(id);
         } catch (error) {
             console.error("Error accessing microphone:", error);
         }
@@ -96,54 +104,78 @@ const App = () => {
         }
     };
 
-    // Polling function to fetch transcriptions
     useEffect(() => {
         console.log("use effect triggered...")
         console.log(requestIds)
-        requestIds.length > 0 ? setTimeout(() => pollTranscriptions(requestIdsRef.current), 15000) : console.log("No transcription request ids to poll.")
-    }, [requestIds]);
+        // if there are no requestId's to poll and we are not recording then unschedule the poll function
+        if (requestIds.length === 0 && !recording ) {
+            if (intervalId && Number.isInteger(intervalId)) {
+                console.debug("Stopping the poll function.")
+                clearInterval(intervalId);
+            } else {
+                console.log("The interval id is not defined.");
+            }
+        }
+    }, [requestIds, intervalId]);
+
+    const removeRequestId = (requestIdToRemove) => {
+        // Convert requestIdToRemove to an integer
+        const idToRemove = parseInt(requestIdToRemove, 10);
+        setRequestIds((prevRequestIds) => {
+            const updatedRequestIds = prevRequestIds.filter(reqId => reqId !== idToRemove);
+            console.debug("Request ids after remove: " + updatedRequestIds);
+            return updatedRequestIds;
+        });
+    };
 
     // Function to poll the server for transcription texts
-    const pollTranscriptions = useCallback((requestIds) => {
+    const pollTranscriptions = () => {
         // TODO: implement functionality to ensure the transcription text chunks are shown in correct order
-        // TODO: bundle ids so we don't make a large number of requests, one for each text chunk, in stead request text from all remaining chunks and then order
-        // TODO: løsning, i stedet for en for-løkke sendes et json object med de id'er der ønskes - view osv. skal tilpasses så der gives et JSON object tilbage med dem der mangler
-        console.debug("Running poll method with requestIds: " + requestIds)
+        console.debug("Running poll method with requestIds: " + requestIdsRef.current)
+        if (requestIdsRef.current.length > 0) {
+            const requestIdJson = [];
+            const formData = new FormData();
+            for (const requestId of requestIdsRef.current) {
+                requestIdJson.push({
+                    "request_id": requestId
+                })
+            }
+            formData.append('request_ids', JSON.stringify(requestIdJson))
+            console.debug("Generated request id JSON: " + requestIdJson)
 
-        for (const requestId of requestIds) {
-            fetch(`http://localhost:8000/get-transcription/${requestId}/`, {
-                method: "GET",
+            fetch(`http://localhost:8000/get-transcriptions/`, {
+                method: "POST",
                 credentials: "include",
                 headers: {
                     "X-CSRFToken": csrfToken,
                 },
+                body: formData,
             })
                 .then(response => response.json())
                 .then(data => {
                     // debug logging the data returned from the server
-                    console.debug('RequestId data: ', data);
-                    if (data.transcription) {
-                        console.debug("Setting transcription text for requestId: " + requestId)
-                        // Add the transcription to the state
-                        setTranscriptions((prev) => [...prev, data.transcription]);
-
-                        // Remove the request ID from the polling list
-                        setRequestIds((prevIds) =>
-                            prevIds.filter((id) => id !== requestId)
-                        );
-                    } else {
-                       console.debug("Transcription text not ready for requestId: " + requestId)
+                    console.debug('Response data: ', data.transcriptions);
+                    if (data.transcriptions) {
+                        for (const transcription of data.transcriptions) {
+                            if (transcription && transcription.transcription_text) {
+                                console.debug("Setting transcription text for requestId: " + transcription.request_id)
+                                // Add the transcription to the state
+                                setTranscriptions((prev) => [...prev, transcription.transcription_text]);
+                                // Remove the request ID from the polling list
+                                removeRequestId(transcription.request_id)
+                            } else {
+                                console.debug("Transcription text not ready for requestId: " + transcription.request_id)
+                            }
+                        }
                     }
                 })
                 .catch(error => {
                     console.error('Error polling backend:', error);
                 });
+        } else {
+            console.debug("No request ids to send.")
         }
-        if (requestIds.length > 0) {
-            console.debug("Scheduling poll for transcription texts.")
-            setTimeout(() => pollTranscriptions(requestIdsRef.current), 15000);
-        }
-    }, [requestIds]);
+    };
 
     return (
         <div>
