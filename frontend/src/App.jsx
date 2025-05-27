@@ -158,9 +158,13 @@ const App = () => {
                     if (data.transcriptions) {
                         for (const transcription of data.transcriptions) {
                             if (transcription && transcription.transcription_text) {
-                                console.debug("Setting transcription text for requestId: " + transcription.request_id)
-                                // Add the transcription to the state
-                                setTranscriptions((prev) => [...prev, transcription.transcription_text]);
+                                if (transcription.transcription_text !== "SILENT_AUDIO_CHUNK") {
+                                    // Add the transcription to the state
+                                    console.debug("Setting transcription text for requestId: " + transcription.request_id)
+                                    setTranscriptions((prev) => [...prev, transcription.transcription_text]);
+                                } else {
+                                    console.debug("Silent audio chunk for requestId: " + transcription.request_id)
+                                }
                                 // Remove the request ID from the polling list
                                 removeRequestId(transcription.request_id)
                             } else {
@@ -178,6 +182,7 @@ const App = () => {
     };
 
     const resetServerData = async () => {
+        console.debug("Resetting server data.")
         setTranscriptions([]);
         fetch(`http://localhost:8000/reset-data/`, {
             method: "GET",

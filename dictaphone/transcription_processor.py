@@ -7,6 +7,7 @@ import subprocess
 import whisper
 import torch
 from typing import Any
+from pydub import AudioSegment
 
 def convert_audio_to_wav(input_path, output_path):
     try:
@@ -71,13 +72,6 @@ class TranscriptionProcessor:
 
                 # Perform transcription
                 try:
-                    # Convert the uploaded file to WAV
-                    #convert_audio_to_wav(uploaded_file_path, converted_file_path)
-                    #print(f"Uploaded file successfully converted to file: {converted_file_path}")
-
-                    # TODO: add logic for cleaning leading silence in file - discard file if it only contains silence
-
-                    # transcribe chunk
                     transcribe_arguments = {"fp16": False}
                     # Setup CPU/GPU and model
                     #if torch.cuda.is_available():
@@ -86,16 +80,22 @@ class TranscriptionProcessor:
                     #    device = torch.device("mps")
                     #else:
                     #    device = torch.device("cpu")
-                    transcribed_result: dict[str, Any] = self.model.transcribe(
-                        Path(uploaded_file_path).resolve().as_posix(), **transcribe_arguments
-                    )
-                    transcription_text = transcribed_result["text"]
-                    print(f"Transcription result for ID {request_id}: {transcription_text}")
-
-                    # Store the transcription in a thread-safe manner
-                    with self.transcriptions_lock:
-                        self.transcriptions[str(request_id)] = transcription_text
-                        # TODO: implement code for appending to outputfile on the server
+                    trimmed_path = trim_start(Path(uploaded_file_path).resolve().as_posix())
+                    if trimmed_path is None:
+                        # the audio chunk was silent
+                        print(f"The transcription with requestId = {request_id} was silent.")
+                        with self.transcriptions_lock:
+                            self.transcriptions[str(request_id)] = "SILENT_AUDIO_CHUNK"
+                    else:
+                        transcribed_result: dict[str, Any] = self.model.transcribe(
+                            Path(trimmed_path).resolve().as_posix(), **transcribe_arguments
+                        )
+                        transcription_text = transcribed_result["text"]
+                        print(f"Transcription result for ID {request_id}: {transcription_text}")
+                        # Store the transcription in a thread-safe manner
+                        with self.transcriptions_lock:
+                            self.transcriptions[str(request_id)] = transcription_text
+                            # TODO: implement code for appending to outputfile on the server
 
                     #print(self.transcriptions)
 
@@ -109,3 +109,39 @@ class TranscriptionProcessor:
 
             # Sleep briefly to avoid busy-waiting
             time.sleep(0.1)
+
+
+# Function to detect leading silence
+# Returns the number of milliseconds until the first sound (chunk averaging more than X decibels)
+# And a flag to signal complete silence
+def milliseconds_until_sound(sound, silence_threshold_in_decibels=-30.0, chunk_size=10):
+    trim_ms = 0  # ms
+    complete_silence = False
+
+    print(f"Length of sound file: {len(sound)}")
+    assert chunk_size > 0  # to avoid infinite loop
+    while sound[trim_ms:trim_ms+chunk_size].dBFS < silence_threshold_in_decibels and trim_ms < len(sound):
+        trim_ms += chunk_size
+    if trim_ms >= len(sound):
+        complete_silence = True
+    return trim_ms, complete_silence
+
+# Function trims leading silence and returns the new audio and the new file path
+def trim_start(filepath):
+    path = Path(filepath)
+    directory = path.parent
+    filename = path.name
+    with open(filepath, "rb") as file:
+        audio = AudioSegment.from_file(file, format="wav")
+    start_trim, silence = milliseconds_until_sound(audio)
+    print(f"Value of start_trim: {start_trim} and value of silence flag: {silence.__str__()}")
+    if silence:
+        print("Sound chunk is silent, discarding.")
+        return None
+    trimmed = audio[start_trim:]
+    new_filename = directory / f"trimmed_{filename}"
+
+    with open(new_filename, "wb") as file:
+        trimmed.export(file, format="wav")
+
+    return new_filename
