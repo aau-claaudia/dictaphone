@@ -80,7 +80,8 @@ class TranscriptionProcessor:
                     #    device = torch.device("mps")
                     #else:
                     #    device = torch.device("cpu")
-                    trimmed_path = trim_start(Path(uploaded_file_path).resolve().as_posix())
+                    # TODO: thresh_hold in settings
+                    trimmed_path = trim_start(Path(uploaded_file_path).resolve().as_posix(), -20)
                     if trimmed_path is None:
                         # the audio chunk was silent
                         print(f"The transcription with requestId = {request_id} was silent.")
@@ -114,7 +115,7 @@ class TranscriptionProcessor:
 # Function to detect leading silence
 # Returns the number of milliseconds until the first sound (chunk averaging more than X decibels)
 # And a flag to signal complete silence
-def milliseconds_until_sound(sound, silence_threshold_in_decibels=-30.0, chunk_size=10):
+def milliseconds_until_sound(sound, silence_threshold_in_decibels=-20.0, chunk_size=10):
     trim_ms = 0  # ms
     complete_silence = False
 
@@ -127,13 +128,13 @@ def milliseconds_until_sound(sound, silence_threshold_in_decibels=-30.0, chunk_s
     return trim_ms, complete_silence
 
 # Function trims leading silence and returns the new audio and the new file path
-def trim_start(filepath):
+def trim_start(filepath, threshold):
     path = Path(filepath)
     directory = path.parent
     filename = path.name
     with open(filepath, "rb") as file:
         audio = AudioSegment.from_file(file, format="wav")
-    start_trim, silence = milliseconds_until_sound(audio)
+    start_trim, silence = milliseconds_until_sound(audio, silence_threshold_in_decibels=threshold)
     print(f"Value of start_trim: {start_trim} and value of silence flag: {silence.__str__()}")
     if silence:
         print("Sound chunk is silent, discarding.")

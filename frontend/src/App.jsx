@@ -209,6 +209,7 @@ const App = () => {
                 Reset server data
             </button>
             <textarea
+                id="transcribed-text"
                 readOnly
                 value={transcriptions.join("\n")}
                 style={{width: "100%", height: "200px", marginTop: "20px"}}

@@ -13,14 +13,14 @@ class TestSilenceHandling(unittest.TestCase):
     def test_silence_handling(self):
         print("Running audio handling tests...")
 
-        file_name = trim_start(self.file_path_silence.as_posix())
+        file_name = trim_start(self.file_path_silence.as_posix(), -30)
         print(f"File name: {file_name}")
         self.assertIsNone(file_name)
 
-        file_name = trim_start(self.file_path_silence_2.as_posix())
+        file_name = trim_start(self.file_path_silence_2.as_posix(), -30)
         print(f"File name: {file_name}")
         self.assertIsNone(file_name)
 
-        file_name = trim_start(self.file_path_leading_silence.as_posix())
+        file_name = trim_start(self.file_path_leading_silence.as_posix(), -30)
         print(f"File name: {file_name}")
         self.assertIsNotNone(file_name)
