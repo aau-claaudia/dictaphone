@@ -2,6 +2,7 @@ import React, {useCallback, useEffect, useRef, useState} from "react";
 import {csrfToken} from "./csrf.js";
 import { MediaRecorder, register } from 'extendable-media-recorder';
 import { connect } from 'extendable-media-recorder-wav-encoder';
+import Settings from "./Settings.jsx";
 
 await register(await connect());
 
@@ -13,6 +14,10 @@ const App = () => {
     const [requestIds, setRequestIds] = useState([]); // Store request Ids
     const requestIdsRef = useRef(requestIds);
     const [transcriptions, setTranscriptions] = useState([]); // Store transcriptions
+    const [showSettings, setShowSettings] = useState(false);
+    const [silenceThreshold, setSilenceThreshold] = useState(-20);
+    const [chunkSize, setChunkSize] = useState(10000);
+
     // Keep the ref updated with the latest requestIds object
     useEffect(() => {
         requestIdsRef.current = requestIds;
@@ -21,7 +26,7 @@ const App = () => {
         recordingRef.current = recording;
     }, [recording]);
 
-    //TODO: load relevant state from session
+    //TODO: load relevant state from session / backend server
 
     // Variable to store the .wav header (first 44 bytes)
     // The header is not automatically added to chunks when using slicing
@@ -81,8 +86,7 @@ const App = () => {
                     }
                 }
             };
-            // TODO: fitting interval? (should interval be configurable from the UI through a setting?)
-            recorder.start(10000); // Emit data every 10 seconds
+            recorder.start(chunkSize); // Emit data every X seconds
             setMediaRecorder(recorder);
             setRecording(true);
             // schedule poll function for transcription texts
@@ -104,7 +108,7 @@ const App = () => {
         // schedule cleanup of poll function after chunk size plus 10 seconds
         setTimeout(() => {
             cleanupPollSchedule();
-        }, 10000 + 10000); // TODO: insert variable chunk size
+        }, 10000 + chunkSize);
     };
 
     const cleanupPollSchedule = () => {
@@ -211,6 +215,20 @@ const App = () => {
             });
     }
 
+    // Function for showing or hiding the settings
+    const showOrHideSettings = () => {
+        setShowSettings(!showSettings);
+    }
+
+    const onUpdateSilenceThreshold = async (threshold) => {
+        // TODO: make request to backend to update the threshold
+        setSilenceThreshold(parseInt(threshold, 10));
+    }
+
+    const onUpdateChunkSize = async (chunksize) => {
+        setChunkSize(parseInt(chunksize, 10));
+    }
+
     return (
         <div className='App'>
             <h1>Dictaphone prototype</h1>
@@ -223,6 +241,20 @@ const App = () => {
             <button onClick={resetServerData}>
                 Reset server data
             </button>
+            <button onClick={showOrHideSettings}>
+                {showSettings ? 'Hide settings' : 'Show settings'}
+            </button>
+            {
+                showSettings && (
+                    <Settings
+                        onUpdateSilenceThreshold={onUpdateSilenceThreshold}
+                        currentSilenceThreshold={silenceThreshold}
+                        onUpdateChunkSize={onUpdateChunkSize}
+                        currentChunkSize={chunkSize}
+                    />
+                )
+            }
+            <h2>Transcribed text</h2>
             <textarea
                 id="transcribed-text"
                 readOnly
