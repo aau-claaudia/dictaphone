@@ -7,15 +7,19 @@ await register(await connect());
 
 const App = () => {
     const [recording, setRecording] = useState(false);
+    const recordingRef = useRef(recording);
     const [mediaRecorder, setMediaRecorder] = useState(null);
     const [intervalId, setIntervalId] = useState(null);
-    const [requestIds, setRequestIds] = useState([]); // Store request IDs
+    const [requestIds, setRequestIds] = useState([]); // Store request Ids
     const requestIdsRef = useRef(requestIds);
     const [transcriptions, setTranscriptions] = useState([]); // Store transcriptions
     // Keep the ref updated with the latest requestIds object
     useEffect(() => {
         requestIdsRef.current = requestIds;
     }, [requestIds]);
+    useEffect(() => {
+        recordingRef.current = recording;
+    }, [recording]);
 
     //TODO: load relevant state from session
 
@@ -56,10 +60,6 @@ const App = () => {
 
                     //TODO: use relative links and proxy
 
-                    //TODO: use chunks of 5 seconds - check with tool or script if silence in audio to filter + remove silence
-                    //can use this https://github.com/openai/openai-cookbook/blob/main/examples/Whisper_processing_guide.ipynb
-                    //to trim leading silence, and maybe something like if trim_ms >= len(sound) and .. how does sound[] work
-
                     try {
                         const response = await fetch("http://localhost:8000/upload-audio-chunk/", {
                             method: "POST",
@@ -87,8 +87,6 @@ const App = () => {
             setRecording(true);
             // schedule poll function for transcription texts
             console.debug("Scheduling poll function.");
-            //requestIds.length > 0 ? setTimeout(() => pollTranscriptions(requestIdsRef.current, removeRequestId), 15000) : console.log("No transcription request ids to poll.")
-            //setIntervalId( setInterval(pollTranscriptions(requestIdsRef.current, removeRequestId), 5000) )
             let id = setInterval(pollTranscriptions, 5000);
             console.debug("Interval id from setInterval: " + id);
             setIntervalId(id);
@@ -98,23 +96,40 @@ const App = () => {
     };
 
     const stopRecording = () => {
+        console.debug("Stopping to record.")
         if (mediaRecorder) {
             mediaRecorder.stop();
             setRecording(false);
         }
+        // schedule cleanup of poll function after chunk size plus 10 seconds
+        setTimeout(() => {
+            cleanupPollSchedule();
+        }, 10000 + 10000); // TODO: insert variable chunk size
     };
 
+    const cleanupPollSchedule = () => {
+        console.debug("Running cleanup function.")
+        if (!recordingRef.current) {
+            console.debug("Running stop poll.")
+            stopPoll();
+        }
+    }
+
+    const stopPoll = () => {
+        if (intervalId && Number.isInteger(intervalId)) {
+            console.debug("Stopping the poll function.")
+            clearInterval(intervalId);
+            setIntervalId(null);
+        } else {
+            console.log("The interval id is not defined.");
+        }
+    }
     useEffect(() => {
         console.log("use effect triggered...")
         console.log(requestIds)
         // if there are no requestId's to poll and we are not recording then unschedule the poll function
-        if (requestIds.length === 0 && !recording ) {
-            if (intervalId && Number.isInteger(intervalId)) {
-                console.debug("Stopping the poll function.")
-                clearInterval(intervalId);
-            } else {
-                console.log("The interval id is not defined.");
-            }
+        if (requestIds.length === 0 && !recordingRef.current ) {
+            stopPoll();
         }
     }, [requestIds, intervalId]);
 
