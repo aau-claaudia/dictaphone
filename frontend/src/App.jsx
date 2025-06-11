@@ -105,19 +105,7 @@ const App = () => {
             mediaRecorder.stop();
             setRecording(false);
         }
-        // schedule cleanup of poll function after chunk size plus 10 seconds
-        setTimeout(() => {
-            cleanupPollSchedule();
-        }, 10000 + chunkSize);
     };
-
-    const cleanupPollSchedule = () => {
-        console.debug("Running cleanup function.")
-        if (!recordingRef.current) {
-            console.debug("Running stop poll.")
-            stopPoll();
-        }
-    }
 
     const stopPoll = () => {
         if (intervalId && Number.isInteger(intervalId)) {
