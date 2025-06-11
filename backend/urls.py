@@ -16,12 +16,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
-from dictaphone.views import index, FileUploadView, GetTranscriptionsView, reset_data
+from dictaphone.views import index, FileUploadView, GetTranscriptionsView, reset_data, SilenceThresholdView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('upload-audio-chunk/', FileUploadView.as_view(), name="upload_audio_chunk"),
     path('get-transcriptions/', GetTranscriptionsView.as_view(), name="get_transcriptions"),
+    path('update-silence-threshold/', SilenceThresholdView.as_view(), name="update_silence_threshold"),
     path('reset-data/', reset_data, name="reset_data"),
     path('', index, name='index'),  # Example route
 ]

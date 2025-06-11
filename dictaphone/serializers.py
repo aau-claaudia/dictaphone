@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import FileUpload, RequestIdJson
+from .models import FileUpload, RequestIdJson, SilenceThreshold
 
 class FileUploadSerializer(serializers.ModelSerializer):
     class Meta:
@@ -10,6 +10,11 @@ class RequestIdJsonSerializer(serializers.ModelSerializer):
     class Meta:
         model = RequestIdJson
         fields = ['request_id']
+
+class SilenceThresholdSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SilenceThreshold
+        fields = ['silence_threshold']
 
 class MultipleRequestIdJsonSerializer(serializers.Serializer):
     requests = RequestIdJsonSerializer(many=True)

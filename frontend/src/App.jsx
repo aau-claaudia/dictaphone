@@ -15,7 +15,7 @@ const App = () => {
     const requestIdsRef = useRef(requestIds);
     const [transcriptions, setTranscriptions] = useState([]); // Store transcriptions
     const [showSettings, setShowSettings] = useState(false);
-    const [silenceThreshold, setSilenceThreshold] = useState(-20);
+    const [silenceThreshold, setSilenceThreshold] = useState(-30);
     const [chunkSize, setChunkSize] = useState(10000);
 
     // Keep the ref updated with the latest requestIds object
@@ -137,7 +137,7 @@ const App = () => {
 
     // Function to poll the server for transcription texts
     const pollTranscriptions = () => {
-        // TODO: implement functionality to ensure the transcription text chunks are shown in correct order
+        // TODO: implement functionality to ensure the transcription text chunks are shown in correct order (use requestId -> increasing number)
         console.debug("Running poll method with requestIds: " + requestIdsRef.current)
         if (requestIdsRef.current.length > 0) {
             const requestIdJson = [];
@@ -209,7 +209,27 @@ const App = () => {
     }
 
     const onUpdateSilenceThreshold = async (threshold) => {
-        // TODO: make request to backend to update the threshold
+        console.debug("Updating the silence threshold, sending data: " + threshold)
+        // Prepare the form data
+        const formData = new FormData();
+        formData.append("silence_threshold", threshold);
+        try {
+            const response = await fetch("http://localhost:8000/update-silence-threshold/", {
+                method: "POST",
+                credentials: 'include', // Include cookies
+                headers: {
+                    'X-CSRFToken': csrfToken, // Include the CSRF token
+                },
+                body: formData,
+            });
+            if (response.ok) {
+                const responseData = await response.json();
+                console.debug(responseData);
+            }
+        } catch (e) {
+            // Handle network errors
+            console.debug("Error updating silence threshold: " + e);
+        }
         setSilenceThreshold(parseInt(threshold, 10));
     }
 

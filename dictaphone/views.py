@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from backend.settings import transcription_processor
-from .serializers import FileUploadSerializer, MultipleRequestIdJsonSerializer, RequestIdJsonSerializer
+from .serializers import FileUploadSerializer, MultipleRequestIdJsonSerializer, RequestIdJsonSerializer, SilenceThresholdSerializer
 from django.http import HttpResponse
 from django.http.response import JsonResponse
 from django.conf import settings
@@ -38,6 +38,25 @@ class FileUploadView(APIView):
                 return Response(file_serializer.errors, status=400)
         else:
             return Response("No upload data.", status=400)
+
+
+class SilenceThresholdView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        #print(request.data)
+        if request.data and request.data.get('silence_threshold'):
+            # parse silence threshold from data
+            silence_threshold_serializer = SilenceThresholdSerializer(data={'silence_threshold': request.data.get('silence_threshold')})
+            if silence_threshold_serializer.is_valid():
+                threshold = silence_threshold_serializer.validated_data['silence_threshold']
+                #print(threshold)
+                transcription_processor.set_silence_threshold(threshold)
+                return JsonResponse({"message": "Silence threshold successfully configured!", "silence_threshold": threshold}, status=200)
+            else:
+                return Response(silence_threshold_serializer.errors, status=400)
+        else:
+            return Response("No silence threshold data.", status=400)
 
 
 class GetTranscriptionsView(APIView):

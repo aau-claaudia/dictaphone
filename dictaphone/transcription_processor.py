@@ -37,6 +37,7 @@ class TranscriptionProcessor:
         self.model = whisper.load_model(model_name, device=self.device)  # Load the Whisper model once
         self.worker_thread = threading.Thread(target=self._process_queue, daemon=True)
         self.worker_thread.start()  # Start the background worker thread
+        self.silence_threshold = -30 # Initialize to normal sensitivity
 
     def add_to_queue(self, file_path: str):
         """Thread-safe method to add a file to the queue."""
@@ -46,6 +47,10 @@ class TranscriptionProcessor:
         self.queue.put((request_id, file_path))
         print(f"Added file to queue: {file_path} with ID: {request_id}")
         return request_id
+
+    def set_silence_threshold(self, silence_threshold: int):
+        with self.lock:
+            self.silence_threshold = silence_threshold
 
     def get_transcription(self, request_id: str) -> str:
         """Thread-safe method to retrieve transcription text by request ID."""
@@ -80,8 +85,7 @@ class TranscriptionProcessor:
                     #    device = torch.device("mps")
                     #else:
                     #    device = torch.device("cpu")
-                    # TODO: thresh_hold in settings
-                    trimmed_path = trim_start(Path(uploaded_file_path).resolve().as_posix(), -20)
+                    trimmed_path = trim_start(Path(uploaded_file_path).resolve().as_posix(), self.silence_threshold)
                     if trimmed_path is None:
                         # the audio chunk was silent
                         print(f"The transcription with requestId = {request_id} was silent.")

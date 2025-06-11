@@ -22,8 +22,8 @@ const Settings = ({onUpdateChunkSize, currentChunkSize, onUpdateSilenceThreshold
                 </p>
                 <div className="select-box">
                     <select defaultValue={currentSilenceThreshold} onChange={handleSilenceThresholdChange}>
-                        <option value="-15">High (less silence filtering)</option>
-                        <option value="-20">Normal (recommended)</option>
+                        <option value="-35">High (less silence filtering)</option>
+                        <option value="-30">Normal (recommended)</option>
                         <option value="-25">Low (filter more quite sounds)</option>
                     </select>
                 </div>
