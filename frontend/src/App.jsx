@@ -10,7 +10,9 @@ const App = () => {
     const [recording, setRecording] = useState(false);
     const recordingRef = useRef(recording);
     const [mediaRecorder, setMediaRecorder] = useState(null);
+    const [mediaStream, setMediaStream] = useState(null);
     const [intervalId, setIntervalId] = useState(null);
+    const intervalIdRef = useRef(intervalId);
     const [requestIds, setRequestIds] = useState([]); // Store request Ids
     const requestIdsRef = useRef(requestIds);
     const [transcriptions, setTranscriptions] = useState([]); // Store transcriptions
@@ -25,93 +27,138 @@ const App = () => {
     useEffect(() => {
         recordingRef.current = recording;
     }, [recording]);
+    useEffect(() => {
+        intervalIdRef.current = intervalId;
+    }, [intervalId]);
 
     //TODO: load relevant state from session / backend server
 
-    // Variable to store the .wav header (first 44 bytes)
-    // The header is not automatically added to chunks when using slicing
-    let header = null;
-
     const startRecording = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    noiseSuppression: false,
-                    echoCancellation: false
-                }
-            });
-            //const recorder = new MediaRecorder(stream);
-            const recorder = new MediaRecorder(stream, { mimeType: 'audio/wav' });
+        // TODO: make threshold and duration configurable (at least for testing - maybe configurable for advanced users)
+        const silenceThreshold = 0.30; // Define the silence threshold (normalized amplitude)
+        const silenceDuration = 1700; // Duration (in ms) to consider as a pause
+        let silenceStart = null;
+        let isRecording = false;
 
-            recorder.ondataavailable = async (event) => {
-                if (event.data.size > 0) {
-                    let firstChunk = false;
-                    const audioChunk = event.data;
-                    // Read the first 44 bytes (header) from the first chunk
-                    if (!header) {
-                        firstChunk = true;
-                        const arrayBuffer = await audioChunk.arrayBuffer();
-                        header = arrayBuffer.slice(0, 44); // Extract the first 44 bytes
+        // Request access to the microphone
+        const streamInstance = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                noiseSuppression: false,
+                echoCancellation: false
+            }
+        });
+        setMediaStream(streamInstance);
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(streamInstance);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const mediaRecorderInstance = new MediaRecorder(streamInstance,{ mimeType: 'audio/wav' });
+        setMediaRecorder(mediaRecorderInstance);
+        let audioChunks = [];
+
+        mediaRecorderInstance.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                audioChunks.push(event.data);
+            }
+        };
+
+        mediaRecorderInstance.onstop = async () => {
+            console.debug("Audio chunk captured, size of array: ", audioChunks.length);
+            // Process or save the audio chunks here
+            if (audioChunks.length > 0) {
+                const body = new Blob(audioChunks, { type: "audio/wav" })
+                // Prepare the form data
+                const formData = new FormData();
+                formData.append("audio_chunk", body, "chunk.wav");
+
+                //TODO: use relative links and proxy
+                try {
+                    const response = await fetch("http://localhost:8000/upload-audio-chunk/", {
+                        method: "POST",
+                        credentials: 'include', // Include cookies
+                        headers: {
+                            'X-CSRFToken': csrfToken, // Include the CSRF token
+                        },
+                        body: formData,
+                    });
+                    if (response.ok) {
+                        const queueRequestData = await response.json();
+                        console.debug(queueRequestData);
+                        // Add the request ID to the state
+                        setRequestIds((prevIds) => [...prevIds, queueRequestData.request_id]);
                     }
-
-                    // Prepend the header to subsequent chunks (not for first chunk)
-                    const body = !firstChunk
-                        ? new Blob([header, audioChunk], { type: "audio/wav" })
-                        : audioChunk;
-
-                    // Prepare the form data
-                    const formData = new FormData();
-                    formData.append("audio_chunk", body, "chunk.wav");
-
-                    //TODO: use relative links and proxy
-
-                    try {
-                        const response = await fetch("http://localhost:8000/upload-audio-chunk/", {
-                            method: "POST",
-                            credentials: 'include', // Include cookies
-                            headers: {
-                                'X-CSRFToken': csrfToken, // Include the CSRF token
-                            },
-                            body: formData,
-                        });
-                        if (response.ok) {
-                            const queueRequestData = await response.json();
-                            console.debug(queueRequestData);
-                            // Add the request ID to the state
-                            setRequestIds((prevIds) => [...prevIds, queueRequestData.request_id]);
-                        }
-                    } catch (e) {
-                        // Handle network errors
-                        console.debug("Error sending audio data to backend: " + e);
-                    }
+                    audioChunks = [];
+                } catch (e) {
+                    // Handle network errors
+                    console.debug("Error sending audio data to backend: " + e);
                 }
-            };
-            recorder.start(chunkSize); // Emit data every X seconds
-            setMediaRecorder(recorder);
-            setRecording(true);
-            // schedule poll function for transcription texts
-            console.debug("Scheduling poll function.");
-            let id = setInterval(pollTranscriptions, 5000);
-            console.debug("Interval id from setInterval: " + id);
-            setIntervalId(id);
-        } catch (error) {
-            console.error("Error accessing microphone:", error);
+            }
+        };
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        function checkAudioLevel() {
+            analyser.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+            //console.debug("Average: " + average);
+            const normalizedLevel = average / 255; // Normalize to a range of 0 to 1
+            //console.debug("Normalized level: " + normalizedLevel)
+            if (normalizedLevel < silenceThreshold) {
+                // Silence detected
+                if (!silenceStart) {
+                    silenceStart = Date.now();
+                    console.debug("Silence start: " + silenceStart);
+                } else if (((Date.now() - silenceStart) > silenceDuration) && isRecording) {
+                    // Stop recording if silence lasts long enough
+                    //console.debug("Datetime: " + Date.now());
+                    console.debug("Time elapsed: " + (Date.now() - silenceStart));
+                    console.debug("Silence detected, stopping recording...");
+                    mediaRecorderInstance.stop();
+                    isRecording = false;
+                }
+            } else {
+                // Sound detected
+                //silenceStart = null;
+                if (silenceStart !== null) {
+                    console.debug("Sound detected, resetting silenceStart.");
+                    silenceStart = null;
+                }
+                if (!isRecording) {
+                    console.debug("Sound detected, starting recording...");
+                    mediaRecorderInstance.start();
+                    isRecording = true;
+                }
+            }
+            requestAnimationFrame(checkAudioLevel);
         }
-    };
+        checkAudioLevel();
+        setRecording(true);
+        console.debug("Scheduling poll function.");
+        let id = setInterval(pollTranscriptions, 5000);
+        console.debug("Interval id from setInterval: " + id);
+        setIntervalId(id);
+    }
 
     const stopRecording = () => {
-        console.debug("Stopping to record.")
-        if (mediaRecorder) {
-            mediaRecorder.stop();
-            setRecording(false);
+        console.debug("Stopping the recording...");
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop(); // Stop the MediaRecorder
+        } else {
+            console.debug("MediaRecorder is not active or already stopped.");
+        }
+        setRecording(false);
+        console.debug("Stopping the stream...");
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
         }
     };
 
     const stopPoll = () => {
-        if (intervalId && Number.isInteger(intervalId)) {
+        if (intervalIdRef.current && Number.isInteger(intervalIdRef.current)) {
             console.debug("Stopping the poll function.")
-            clearInterval(intervalId);
-            setIntervalId(null);
+            clearInterval(intervalIdRef.current);
         } else {
             console.log("The interval id is not defined.");
         }
@@ -185,6 +232,10 @@ const App = () => {
                 });
         } else {
             console.debug("No request ids to send.")
+            if (!recordingRef.current) {
+                console.debug("Not recording, stopping the poll function.")
+                stopPoll();
+            }
         }
     };
 
