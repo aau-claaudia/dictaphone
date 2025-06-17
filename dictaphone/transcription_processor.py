@@ -1,3 +1,4 @@
+import math
 import threading
 import queue
 from pathlib import Path
@@ -52,7 +53,7 @@ class TranscriptionProcessor:
         with self.lock:
             self.silence_threshold = silence_threshold
 
-    def get_transcription(self, request_id: str) -> str:
+    def get_transcription(self, request_id: str) -> dict:
         """Thread-safe method to retrieve transcription text by request ID."""
         with self.transcriptions_lock:
             #return self.transcriptions.get(request_id, "NOT_AVAILABLE")
@@ -85,21 +86,42 @@ class TranscriptionProcessor:
                     #    device = torch.device("mps")
                     #else:
                     #    device = torch.device("cpu")
-                    trimmed_path = trim_start(Path(uploaded_file_path).resolve().as_posix(), self.silence_threshold)
+                    trimmed_path = trim_start(Path(uploaded_file_path).resolve().as_posix(), self.silence_threshold, self.counter)
                     if trimmed_path is None:
                         # the audio chunk was silent
                         print(f"The transcription with requestId = {request_id} was silent.")
+                        transcription_result = {
+                            'text': 'SILENT_AUDIO_CHUNK',
+                            'confidence': None,
+                            'file_name': None
+                        }
                         with self.transcriptions_lock:
-                            self.transcriptions[str(request_id)] = "SILENT_AUDIO_CHUNK"
+                            self.transcriptions[str(request_id)] = transcription_result
                     else:
                         transcribed_result: dict[str, Any] = self.model.transcribe(
                             Path(trimmed_path).resolve().as_posix(), **transcribe_arguments
                         )
                         transcription_text = transcribed_result["text"]
-                        print(f"Transcription result for ID {request_id}: {transcription_text}")
+                        confidence = None
+                        try:
+                            avg_logprob = transcribed_result["segments"][0]["avg_logprob"]
+                            confidence = math.exp(avg_logprob)
+                        except KeyError as e:
+                            print(f"KeyError: 'segments' array does not exist {e}")
+                        except IndexError:
+                            print("IndexError: 'segments' array is empty or index out of range.")
+                        except TypeError:
+                            print("TypeError: 'segments' is not a list or is None.")
+
+                        print(f"Transcription result for ID {request_id} - Confidence: {confidence} Text: {transcription_text}")
+                        transcription_result = {
+                            'text': transcription_text,
+                            'confidence': confidence,
+                            'file_name': Path(trimmed_path).name
+                        }
                         # Store the transcription in a thread-safe manner
                         with self.transcriptions_lock:
-                            self.transcriptions[str(request_id)] = transcription_text
+                            self.transcriptions[str(request_id)] = transcription_result
                             # TODO: implement code for appending to outputfile on the server
 
                     #print(self.transcriptions)
@@ -132,7 +154,7 @@ def milliseconds_until_sound(sound, silence_threshold_in_decibels=-20.0, chunk_s
     return trim_ms, complete_silence
 
 # Function trims leading silence and returns the new audio and the new file path
-def trim_start(filepath, threshold):
+def trim_start(filepath, threshold, counter):
     path = Path(filepath)
     directory = path.parent
     filename = path.name
@@ -144,7 +166,7 @@ def trim_start(filepath, threshold):
         print("Sound chunk is silent, discarding.")
         return None
     trimmed = audio[start_trim:]
-    new_filename = directory / f"trimmed_{filename}"
+    new_filename = directory / f"{counter}_{filename}"
 
     with open(new_filename, "wb") as file:
         trimmed.export(file, format="wav")

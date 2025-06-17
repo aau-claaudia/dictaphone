@@ -74,11 +74,21 @@ class GetTranscriptionsView(APIView):
                 requests_meta_data = serializer.validated_data['requests']
                 for request_id in requests_meta_data:
                     print(f"Serialized request_id: {request_id}")
-                    transcription = transcription_processor.get_transcription(request_id.get('request_id'))
-                    responses.append({
-                        'request_id': request_id.get('request_id'),
-                        'transcription_text': transcription
-                    })
+                    transcription_result = transcription_processor.get_transcription(request_id.get('request_id'))
+                    if transcription_result is not None:
+                        responses.append({
+                            'request_id': request_id.get('request_id'),
+                            'transcription_text': transcription_result['text'],
+                            'transcription_confidence': transcription_result['confidence'],
+                            'transcription_file_name': transcription_result['file_name']
+                        })
+                    else:
+                        responses.append({
+                            'request_id': request_id.get('request_id'),
+                            'transcription_text': None,
+                            'transcription_confidence': None,
+                            'transcription_file_name': None
+                        })
                     response['transcriptions'] = responses
                 return JsonResponse(response)
             return Response(serializer.errors, status=400)

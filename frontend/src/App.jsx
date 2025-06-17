@@ -212,12 +212,20 @@ const App = () => {
                     if (data.transcriptions) {
                         for (const transcription of data.transcriptions) {
                             if (transcription && transcription.transcription_text) {
-                                if (transcription.transcription_text !== "SILENT_AUDIO_CHUNK") {
-                                    // Add the transcription to the state
-                                    console.debug("Setting transcription text for requestId: " + transcription.request_id)
-                                    setTranscriptions((prev) => [...prev, transcription.transcription_text]);
+                                if (transcription.transcription_text === "SILENT_AUDIO_CHUNK") {
+                                    // the audio was detected as silent in the backend
+                                    console.debug("Silent audio chunk for requestId: " + transcription.request_id);
+                                } else if (transcription.transcription_confidence && isBelowConfidenceThreshold(transcription.transcription_confidence)) {
+                                    // the confidence is too low and most likely hallucination
+                                    console.debug("Hallucination detected in audio chunk.")
+                                    if (transcription.transcription_file_name) {
+                                        let text = "Inaudible sound - file name: " + transcription.transcription_file_name;
+                                        setTranscriptions((prev) => [...prev, text]);
+                                    }
                                 } else {
-                                    console.debug("Silent audio chunk for requestId: " + transcription.request_id)
+                                    // the transcription text is okay
+                                    console.debug("Setting transcription text for requestId: " + transcription.request_id);
+                                    setTranscriptions((prev) => [...prev, transcription.transcription_text]);
                                 }
                                 // Remove the request ID from the polling list
                                 removeRequestId(transcription.request_id)
@@ -238,6 +246,15 @@ const App = () => {
             }
         }
     };
+
+    const isParsableAsFloat = (value) => {
+        return !isNaN(parseFloat(value)) && isFinite(value);
+    }
+
+    // TODO: make hallucination threshold configurable through settings?
+    const isBelowConfidenceThreshold = (confidence) => {
+        return (isParsableAsFloat(confidence) && (parseFloat(confidence) < 0.55));
+    }
 
     const resetServerData = async () => {
         console.debug("Resetting server data.")
