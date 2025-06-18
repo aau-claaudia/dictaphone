@@ -18,7 +18,7 @@ const App = () => {
     const [transcriptions, setTranscriptions] = useState([]); // Store transcriptions
     const [showSettings, setShowSettings] = useState(false);
     const [silenceThreshold, setSilenceThreshold] = useState(-30);
-    const [chunkSize, setChunkSize] = useState(10000);
+    const [silenceGap, setSilenceGap] = useState(1700);
 
     // Keep the ref updated with the latest requestIds object
     useEffect(() => {
@@ -36,7 +36,7 @@ const App = () => {
     const startRecording = async () => {
         // TODO: make threshold and duration configurable (at least for testing - maybe configurable for advanced users)
         const silenceThreshold = 0.30; // Define the silence threshold (normalized amplitude)
-        const silenceDuration = 1700; // Duration (in ms) to consider as a pause
+        let silenceDuration = silenceGap; // Duration (in ms) to consider as a pause
         let silenceStart = null;
         let isRecording = false;
 
@@ -301,8 +301,8 @@ const App = () => {
         setSilenceThreshold(parseInt(threshold, 10));
     }
 
-    const onUpdateChunkSize = async (chunksize) => {
-        setChunkSize(parseInt(chunksize, 10));
+    const onUpdateSilenceGap = async (gap) => {
+        setSilenceGap(parseInt(gap, 10));
     }
 
     return (
@@ -325,8 +325,8 @@ const App = () => {
                     <Settings
                         onUpdateSilenceThreshold={onUpdateSilenceThreshold}
                         currentSilenceThreshold={silenceThreshold}
-                        onUpdateChunkSize={onUpdateChunkSize}
-                        currentChunkSize={chunkSize}
+                        onUpdateSilenceGao={onUpdateSilenceGap}
+                        currentSilenceGap={silenceGap}
                     />
                 )
             }

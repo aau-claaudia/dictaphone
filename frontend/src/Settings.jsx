@@ -1,21 +1,21 @@
 import React from 'react';
 
-const Settings = ({onUpdateChunkSize, currentChunkSize, onUpdateSilenceThreshold, currentSilenceThreshold}) => {
+const Settings = ({onUpdateSilenceGao, currentSilenceGap, onUpdateSilenceThreshold, currentSilenceThreshold}) => {
     // Function to handle model change
     const handleSilenceThresholdChange = (event) => {
         onUpdateSilenceThreshold(event.target.value);
     };
 
     // Function to handle model change
-    const handleChunkSizeChange = (event) => {
-        onUpdateChunkSize(event.target.value);
+    const handleSilenceGapChange = (event) => {
+        onUpdateSilenceGao(event.target.value);
     };
 
     return (
         <div style={{marginBottom: '5%'}}>
             <h2>Settings</h2>
             <div>
-                <h3>Silence Threshold</h3>
+                <h3>Silence Threshold (backend)</h3>
                 <p>
                     Leading silence in the audio will be trimmed on the server side, and sound chunks with complete silence will be filtered.
                     Set the sensitivity of this trimming/filtering.
@@ -30,16 +30,16 @@ const Settings = ({onUpdateChunkSize, currentChunkSize, onUpdateSilenceThreshold
             </div>
             <hr/>
             <div>
-                <h3>Sound recording chunk size (seconds)</h3>
+                <h3>Silence gap between sound chunks (ms)</h3>
                 <p>
                     Audio is recorded in "chunks" and sent to the server for transcription.
-                    Set the size (in seconds) of these audio chunks.
+                    When silence is detected for the selected amount of time the recorded sound is sent to the server for transcription.
                 </p>
                 <div className="select-box">
-                    <select defaultValue={currentChunkSize} onChange={handleChunkSizeChange}>
-                        <option value="5000">5</option>
-                        <option value="10000">10</option>
-                        <option value="15000">15</option>
+                    <select defaultValue={currentSilenceGap} onChange={handleSilenceGapChange}>
+                        <option value="1500">1500</option>
+                        <option value="1700">1700 (Recommended)</option>
+                        <option value="2000">2000</option>
                     </select>
                 </div>
             </div>
