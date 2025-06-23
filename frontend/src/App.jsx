@@ -1,16 +1,23 @@
-import React, {useCallback, useEffect, useRef, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import {csrfToken} from "./csrf.js";
-import { MediaRecorder, register } from 'extendable-media-recorder';
-import { connect } from 'extendable-media-recorder-wav-encoder';
+import {MediaRecorder, register} from 'extendable-media-recorder';
+import {connect} from 'extendable-media-recorder-wav-encoder';
 import Settings from "./Settings.jsx";
 
 await register(await connect());
 
 const App = () => {
+    const getInitialString = (keyname, value) => {
+        const dataFromSession = sessionStorage.getItem(keyname);
+        return dataFromSession ? JSON.parse(dataFromSession) : value;
+    }
+    const [modelSize, setModelSize] = useState(getInitialString("modelSize", "large-v3"))
+    const [language, setLanguage] = useState(getInitialString("language", "auto"))
     const [recording, setRecording] = useState(false);
     const recordingRef = useRef(recording);
     const [mediaRecorder, setMediaRecorder] = useState(null);
     const [mediaStream, setMediaStream] = useState(null);
+    const [analyser, setAnalyser] = useState(null);
     const [intervalId, setIntervalId] = useState(null);
     const intervalIdRef = useRef(intervalId);
     const [requestIds, setRequestIds] = useState([]); // Store request Ids
@@ -19,6 +26,169 @@ const App = () => {
     const [showSettings, setShowSettings] = useState(false);
     const [silenceThreshold, setSilenceThreshold] = useState(-30);
     const [silenceGap, setSilenceGap] = useState(1700);
+    const [sections, setSections] = useState([
+        { title: "Recording Section 1", isRecording: false, audioLevel: 0, duration: 0, animationFrameId: null },
+    ]);
+
+    useEffect(() => {
+        sessionStorage.setItem("modelSize", JSON.stringify(modelSize))
+    }, [modelSize]);
+    useEffect(() => {
+        sessionStorage.setItem("language", JSON.stringify(language))
+    }, [language]);
+
+    const addSection = () => {
+        setSections([...sections, {
+            title: `Recording Section ${sections.length + 1}`,
+            isRecording: false,
+            audioLevel: 0,
+            duration: 0
+        }]);
+    };
+
+    const handleTitleChange = (e, index) => {
+        const value = e.target.value.replace(/[^a-zA-Z0-9ÆæØøÅå ]/g, ""); // Remove special characters
+        const updatedSections = [...sections];
+        updatedSections[index].title = value;
+        setSections(updatedSections);
+        // Dynamically adjust the input width
+        const inputElement = e.target;
+        inputElement.style.width = `${Math.max(inputElement.value.length * 0.6, 10)}em`;
+    };
+
+    const startRecording = async (index) => {
+        const updatedSections = [...sections];
+        updatedSections[index].isRecording = true;
+        updatedSections[index].startTime = Date.now(); // Record the start time
+        setSections(updatedSections);
+
+        // Simulate audio level updates
+        /*const interval = setInterval(() => {
+            const now = Date.now();
+            const elapsed = Math.floor((now - updatedSections[index].startTime) / 1000); // Duration in seconds
+            updatedSections[index].duration = elapsed;
+            updatedSections[index].audioLevel = Math.random(); // Simulate audio level (0 to 1)
+            setSections([...updatedSections]);
+        }, 1000);
+        updatedSections[index].intervalId = interval; // Save the interval ID for stopping later*/
+
+        // Request access to the microphone
+        const streamInstance = await navigator.mediaDevices.getUserMedia({
+            audio: {
+                noiseSuppression: false,
+                echoCancellation: false
+            }
+        });
+        setMediaStream(streamInstance);
+        const audioContext = new AudioContext();
+        const source = audioContext.createMediaStreamSource(streamInstance);
+        const analyserInstance = audioContext.createAnalyser();
+        analyserInstance.fftSize = 256;
+        source.connect(analyserInstance);
+        setAnalyser(analyserInstance)
+        const mediaRecorderInstance = new MediaRecorder(streamInstance,{ mimeType: 'audio/wav' });
+        setMediaRecorder(mediaRecorderInstance);
+        let audioChunks = [];
+
+        mediaRecorderInstance.ondataavailable = (event) => {
+            if (event.data.size > 0) {
+                console.debug("Pushing data chunk to buffer array.")
+                audioChunks.push(event.data);
+            }
+        };
+
+        mediaRecorderInstance.onstop = async () => {
+            console.debug("Capturing audio, size of array: ", audioChunks.length);
+            // Process or save the audio chunks here
+            if (audioChunks.length > 0) {
+                const body = new Blob(audioChunks, { type: "audio/wav" })
+                // Prepare the form data
+                const formData = new FormData();
+                // TODO: handle empty filename (validation in UI - also lock title name after recording has started?)
+                formData.append("audio_chunk", body, (updatedSections[index].title + ".wav"));
+
+                //TODO: use relative links and proxy
+                try {
+                    // TODO: add upload progress on file
+                    const response = await fetch("http://localhost:8000/upload-audio-chunk/", {
+                        method: "POST",
+                        credentials: 'include', // Include cookies
+                        headers: {
+                            'X-CSRFToken': csrfToken, // Include the CSRF token
+                        },
+                        body: formData,
+                    });
+                    if (response.ok) {
+                        const queueRequestData = await response.json();
+                        console.debug(queueRequestData);
+                        // Add the request ID to the state
+                        //setRequestIds((prevIds) => [...prevIds, queueRequestData.request_id]);
+                    }
+                    audioChunks = [];
+                } catch (e) {
+                    // Handle network errors
+                    console.debug("Error sending audio data to backend: " + e);
+                }
+            }
+        };
+
+        const dataArray = new Uint8Array(analyserInstance.frequencyBinCount);
+
+        function checkAudioLevel() {
+            console.debug("Running checkAudioLevel()");
+            analyserInstance.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
+            //console.debug("Average: " + average);
+            // update audio level
+            updatedSections[index].audioLevel = average / 255; // Normalize to a range of 0 to 1
+            // update recording duration
+            updatedSections[index].duration = Math.floor((Date.now() - updatedSections[index].startTime) / 1000);
+            setSections([...updatedSections]);
+            let animationFrameRequestId = requestAnimationFrame(checkAudioLevel);
+            //console.debug("AnimationFrameRequestId: " + animationFrameRequestId);
+            updatedSections[index].animationFrameId = animationFrameRequestId;
+        }
+        checkAudioLevel();
+        setRecording(true);
+        mediaRecorderInstance.start(10000)
+        // TODO: poll scheduling code needed later
+        //console.debug("Scheduling poll function.");
+        //let id = setInterval(pollTranscriptions, 5000);
+        //console.debug("Interval id from setInterval: " + id);
+        //setIntervalId(id);
+    };
+
+    const stopRecording = (index) => {
+        const updatedSections = [...sections];
+        updatedSections[index].isRecording = false;
+        updatedSections[index].audioLevel = 0;
+        setSections(updatedSections);
+        setRecording(false);
+        if (updatedSections[index].animationFrameId) {
+            console.debug("Stopping the animation frame...");
+            cancelAnimationFrame(updatedSections[index].animationFrameId);
+        }
+        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+            console.debug("Stopping the recording...");
+            mediaRecorder.stop(); // Stop the MediaRecorder
+        } else {
+            console.debug("MediaRecorder is not active or already stopped.");
+        }
+        if (analyser) {
+            console.debug("Stopping the analyser...")
+            analyser.disconnect()
+        }
+        if (mediaStream) {
+            console.debug("Stopping the stream...");
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+    };
+
+    const formatDuration = (seconds) => {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+    };
 
     // Keep the ref updated with the latest requestIds object
     useEffect(() => {
@@ -32,128 +202,6 @@ const App = () => {
     }, [intervalId]);
 
     //TODO: load relevant state from session / backend server
-
-    const startRecording = async () => {
-        // TODO: make threshold and duration configurable (at least for testing - maybe configurable for advanced users)
-        const silenceThreshold = 0.30; // Define the silence threshold (normalized amplitude)
-        let silenceDuration = silenceGap; // Duration (in ms) to consider as a pause
-        let silenceStart = null;
-        let isRecording = false;
-
-        // Request access to the microphone
-        const streamInstance = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                noiseSuppression: false,
-                echoCancellation: false
-            }
-        });
-        setMediaStream(streamInstance);
-        const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(streamInstance);
-        const analyser = audioContext.createAnalyser();
-        analyser.fftSize = 256;
-        source.connect(analyser);
-
-        const mediaRecorderInstance = new MediaRecorder(streamInstance,{ mimeType: 'audio/wav' });
-        setMediaRecorder(mediaRecorderInstance);
-        let audioChunks = [];
-
-        mediaRecorderInstance.ondataavailable = (event) => {
-            if (event.data.size > 0) {
-                audioChunks.push(event.data);
-            }
-        };
-
-        mediaRecorderInstance.onstop = async () => {
-            console.debug("Audio chunk captured, size of array: ", audioChunks.length);
-            // Process or save the audio chunks here
-            if (audioChunks.length > 0) {
-                const body = new Blob(audioChunks, { type: "audio/wav" })
-                // Prepare the form data
-                const formData = new FormData();
-                formData.append("audio_chunk", body, "chunk.wav");
-
-                //TODO: use relative links and proxy
-                try {
-                    const response = await fetch("http://localhost:8000/upload-audio-chunk/", {
-                        method: "POST",
-                        credentials: 'include', // Include cookies
-                        headers: {
-                            'X-CSRFToken': csrfToken, // Include the CSRF token
-                        },
-                        body: formData,
-                    });
-                    if (response.ok) {
-                        const queueRequestData = await response.json();
-                        console.debug(queueRequestData);
-                        // Add the request ID to the state
-                        setRequestIds((prevIds) => [...prevIds, queueRequestData.request_id]);
-                    }
-                    audioChunks = [];
-                } catch (e) {
-                    // Handle network errors
-                    console.debug("Error sending audio data to backend: " + e);
-                }
-            }
-        };
-
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-        function checkAudioLevel() {
-            analyser.getByteFrequencyData(dataArray);
-            const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
-            //console.debug("Average: " + average);
-            const normalizedLevel = average / 255; // Normalize to a range of 0 to 1
-            //console.debug("Normalized level: " + normalizedLevel)
-            if (normalizedLevel < silenceThreshold) {
-                // Silence detected
-                if (!silenceStart) {
-                    silenceStart = Date.now();
-                    console.debug("Silence start: " + silenceStart);
-                } else if (((Date.now() - silenceStart) > silenceDuration) && isRecording) {
-                    // Stop recording if silence lasts long enough
-                    //console.debug("Datetime: " + Date.now());
-                    console.debug("Time elapsed: " + (Date.now() - silenceStart));
-                    console.debug("Silence detected, stopping recording...");
-                    mediaRecorderInstance.stop();
-                    isRecording = false;
-                }
-            } else {
-                // Sound detected
-                //silenceStart = null;
-                if (silenceStart !== null) {
-                    console.debug("Sound detected, resetting silenceStart.");
-                    silenceStart = null;
-                }
-                if (!isRecording) {
-                    console.debug("Sound detected, starting recording...");
-                    mediaRecorderInstance.start();
-                    isRecording = true;
-                }
-            }
-            requestAnimationFrame(checkAudioLevel);
-        }
-        checkAudioLevel();
-        setRecording(true);
-        console.debug("Scheduling poll function.");
-        let id = setInterval(pollTranscriptions, 5000);
-        console.debug("Interval id from setInterval: " + id);
-        setIntervalId(id);
-    }
-
-    const stopRecording = () => {
-        console.debug("Stopping the recording...");
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
-            mediaRecorder.stop(); // Stop the MediaRecorder
-        } else {
-            console.debug("MediaRecorder is not active or already stopped.");
-        }
-        setRecording(false);
-        console.debug("Stopping the stream...");
-        if (mediaStream) {
-            mediaStream.getTracks().forEach(track => track.stop());
-        }
-    };
 
     const stopPoll = () => {
         if (intervalIdRef.current && Number.isInteger(intervalIdRef.current)) {
@@ -301,42 +349,93 @@ const App = () => {
         setSilenceThreshold(parseInt(threshold, 10));
     }
 
-    const onUpdateSilenceGap = async (gap) => {
-        setSilenceGap(parseInt(gap, 10));
+    const onUpdateModel = (modelSize) => {
+        setModelSize(modelSize)
+    }
+
+    const onUpdateLanguage = (language) => {
+        setLanguage(language)
     }
 
     return (
         <div className='App'>
             <h1>Dictaphone prototype</h1>
-            <button onClick={startRecording} disabled={recording}>
-                Start Recording
-            </button>
-            <button onClick={stopRecording} disabled={!recording}>
-                Stop Recording
-            </button>
-            <button onClick={resetServerData}>
-                Reset server data
-            </button>
-            <button onClick={showOrHideSettings}>
+            <button className="transcribe-button" onClick={showOrHideSettings}>
                 {showSettings ? 'Hide settings' : 'Show settings'}
+            </button>
+            <button className="transcribe-button" onClick={resetServerData}>
+                Reset server data
             </button>
             {
                 showSettings && (
                     <Settings
-                        onUpdateSilenceThreshold={onUpdateSilenceThreshold}
-                        currentSilenceThreshold={silenceThreshold}
-                        onUpdateSilenceGao={onUpdateSilenceGap}
-                        currentSilenceGap={silenceGap}
+                        onUpdateModel={onUpdateModel}
+                        currentModelSize={modelSize}
+                        onUpdateLanguage={onUpdateLanguage}
+                        currentLanguage={language}
                     />
                 )
             }
-            <h2>Transcribed text</h2>
-            <textarea
-                id="transcribed-text"
-                readOnly
-                value={transcriptions.join("\n")}
-                style={{width: "100%", height: "200px", marginTop: "20px"}}
-            />
+
+            <div>
+                {sections.map((section, index) => (
+                    <div key={index} className="recording-section">
+                        <div className="recording-header">
+                            <input
+                                type="text"
+                                value={section.title}
+                                onChange={(e) => handleTitleChange(e, index)}
+                                className="section-title-input"
+                                maxLength="30" // Limit to 30 characters
+                                placeholder="Enter title"
+                            />
+                            <button className="add-section-button" onClick={addSection}>+</button>
+                        </div>
+                        <div className="recording-content">
+                            <button className="transcribe-button" onClick={() => startRecording(index)}
+                                    disabled={section.isRecording}>
+                                Start recording
+                            </button>
+                            <button className="transcribe-stop-button" onClick={() => stopRecording(index)}
+                                    disabled={!section.isRecording}>
+                                Stop recording
+                            </button>
+                            <button className="transcribe-stop-button" onClick={() => console.debug("test")}
+                                    disabled={true}>
+                                Play recording
+                            </button>
+                            <div className="audio-level-container">
+                                <label htmlFor={`audio-level-${index}`}>Audio Level:</label>
+                                <progress
+                                    id={`audio-level-${index}`}
+                                    className="audio-level-gauge"
+                                    value={section.audioLevel}
+                                    max="1"
+                                ></progress>
+                            </div>
+                            <div className="recording-duration">
+                                <label>Duration: </label>
+                                <span>{formatDuration(section.duration)}</span>
+                            </div>
+                            <div style={{marginTop: 10}}>
+                                <button className="transcribe-button" onClick={() => console.debug("test")}
+                                        disabled={true}>
+                                    Start transcription
+                                </button>
+                                <button className="transcribe-stop-button" onClick={() => console.debug("test")}
+                                        disabled={true}>
+                                    Stop transcription
+                                </button>
+                            </div>
+                            <h3>Transcription Status</h3>
+                            <p>Here the status will be shown.</p>
+                            <h3>Transcribed text</h3>
+                            <p>Here the transcribed text will be available.</p>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
         </div>
     );
 };

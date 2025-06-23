@@ -31,9 +31,10 @@ class FileUploadView(APIView):
                 print(f"file name: {file_upload.file.name} path: {file_upload.file.path} size: {file_upload.file.size}")
                 # Add the file to the transcription queue
                 uploaded_file_path = file_upload.file.path
-                request_id = transcription_processor.add_to_queue(uploaded_file_path)
+                #request_id = transcription_processor.add_to_queue(uploaded_file_path)
 
-                return JsonResponse({"message": "File uploaded successfully!", "request_id": request_id}, status=200)
+                #return JsonResponse({"message": "File uploaded successfully!", "request_id": request_id}, status=200)
+                return JsonResponse({"message": "File uploaded successfully!", "path": uploaded_file_path}, status=200)
             else:
                 return Response(file_serializer.errors, status=400)
         else:
@@ -99,7 +100,7 @@ def reset_data(request):
     # clear the transcription texts
     transcription_processor.clear_transcriptions()
     # delete the audio files
-    directory_path: str = os.path.join(settings.MEDIA_ROOT, 'UPLOADS')
+    directory_path: str = os.path.join(settings.MEDIA_ROOT, 'UPLOADS/INPUT')
     clean_dir(directory_path)
 
     return HttpResponse("Server data deleted.", status=200)

@@ -37,26 +37,6 @@ h1 {
   line-height: 1.1;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: lightgreen;
-  cursor: pointer;
-  transition: border-color 0.25s;
-  margin-right: 2%;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
 @media (prefers-color-scheme: light) {
   :root {
     color: #213547;
@@ -110,4 +90,179 @@ button:focus-visible {
   transform: translateY(-50%);
   pointer-events: none;
   color: gray;
+}
+
+.recording-section {
+  border: 2px solid #ccc; /* Light gray border */
+  border-radius: 10px; /* Rounded corners */
+  padding: 20px; /* Inner spacing */
+  margin: 20px 0; /* Space between sections */
+  background-color: #f9f9f9; /* Light background color */
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow for depth */
+}
+
+.recording-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.add-section-button {
+  background-color: darkgreen; /* Blue button */
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 30px;
+  height: 30px;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2); /* Subtle shadow */
+}
+
+.add-section-button:hover {
+  background-color: darkgreen; /* Darker blue on hover */
+}
+
+.recording-content {
+  margin-top: 10px;
+}
+
+.transcribe-stop-button {
+  display: inline-block;
+  margin-top: 2%;
+  margin-right: 2%;
+  padding: 10px 20px; /* Adjust padding for medium size */
+  margin-bottom: 2%;
+  font-size: 16px; /* Adjust font size for medium size */
+  font-weight: bold;
+  color: #fff; /* White text color */
+  background-color: #dc3545; /* Vibrant red background color */
+  border: none; /* Remove default border */
+  border-radius: 5px; /* Rounded corners */
+  text-align: center;
+  text-decoration: none; /* Remove underline from links */
+  cursor: pointer; /* Pointer cursor on hover */
+  transition: background-color 0.3s ease, transform 0.3s ease; /* Smooth transitions */
+}
+
+.transcribe-stop-button:hover {
+  background-color: #c82333; /* Darker red on hover */
+  transform: translateY(-2px); /* Slight lift on hover */
+}
+
+.transcribe-stop-button:active {
+  background-color: #bd2130; /* Even darker red on click */
+  transform: translateY(0); /* Reset lift on click */
+}
+
+.transcribe-stop-button:enabled {
+  background-color: #dc3545; /* Vibrant red background color */
+}
+
+.transcribe-stop-button:disabled {
+  background-color: #adb5bd; /* Light grey for disabled state */
+}
+
+.transcribe-stop-button:focus {
+  outline: none; /* Remove default focus outline */
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.5); /* Custom focus outline with red glow */
+}
+
+/* Medium size green button with a modern feel */
+.transcribe-button {
+  display: inline-block;
+  margin-top: 2%;
+  margin-right: 2%;
+  padding: 10px 20px; /* Adjust padding for medium size */
+  margin-bottom: 2%;
+  font-size: 16px; /* Adjust font size for medium size */
+  font-weight: bold;
+  color: #fff; /* White text color */
+  background-color: #28a745; /* Green background color */
+  border: none; /* Remove default border */
+  border-radius: 5px; /* Rounded corners */
+  text-align: center;
+  text-decoration: none; /* Remove underline from links */
+  cursor: pointer; /* Pointer cursor on hover */
+  transition: background-color 0.3s ease, transform 0.3s ease; /* Smooth transitions */
+}
+
+.transcribe-button:hover {
+  background-color: #218838; /* Darker green on hover */
+  transform: translateY(-2px); /* Slight lift on hover */
+}
+
+.transcribe-button:active {
+  background-color: #1e7e34; /* Even darker green on click */
+  transform: translateY(0); /* Reset lift on click */
+}
+.transcribe-button:enabled {
+  background-color: #28a745; /* Green background color */
+}
+
+.transcribe-button:disabled {
+  background-color: #2b542c;
+}
+
+.transcribe-button:focus {
+  outline: none; /* Remove default focus outline */
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.5); /* Custom focus outline */
+}
+
+.section-title-input {
+  font-size: 1.5em; /* Match the size of an h2 */
+  font-weight: bold;
+  border: none;
+  outline: none;
+  background-color: transparent;
+  width: auto; /* Allow the width to adjust dynamically */
+  min-width: 300px; /* Set a minimum width to ensure usability */
+  max-width: 100%; /* Prevent the input from exceeding the container width */
+  margin-bottom: 10px;
+  white-space: nowrap; /* Prevent text wrapping */
+  overflow: hidden; /* Hide overflowing text */
+  text-overflow: ellipsis; /* Add ellipsis for overflowing text */
+}
+.section-title-input:focus {
+  border-bottom: 2px solid darkgreen; /* Add a bottom border on focus */
+}
+
+.audio-level-container {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.audio-level-gauge {
+  width: 100%;
+  height: 10px;
+  border-radius: 5px;
+  background-color: #e0e0e0;
+  appearance: none;
+}
+
+.audio-level-gauge::-webkit-progress-bar {
+  background-color: #e0e0e0;
+  border-radius: 5px;
+}
+
+.audio-level-gauge::-webkit-progress-value {
+  background-color: #007bff;
+  border-radius: 5px;
+}
+
+.audio-level-gauge::-moz-progress-bar {
+  background-color: #007bff;
+  border-radius: 5px;
+}
+
+.recording-duration {
+  margin-top: 10px;
+  font-size: 1em;
+  color: #333;
 }
