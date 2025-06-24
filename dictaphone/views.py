@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from backend.settings import transcription_processor
-from .serializers import FileUploadSerializer, MultipleRequestIdJsonSerializer, RequestIdJsonSerializer, SilenceThresholdSerializer
+from .serializers import FileUploadSerializer, MultipleRequestIdJsonSerializer, RequestIdJsonSerializer, SilenceThresholdSerializer, RecordingFilePathSerializer
 from django.http import HttpResponse
 from django.http.response import JsonResponse
 from django.conf import settings
@@ -30,11 +30,11 @@ class FileUploadView(APIView):
                 file_upload.save()
                 print(f"file name: {file_upload.file.name} path: {file_upload.file.path} size: {file_upload.file.size}")
                 # Add the file to the transcription queue
-                uploaded_file_path = file_upload.file.path
+                file_url = request.build_absolute_uri(os.path.join(settings.MEDIA_ROOT, file_upload.file.name))
+                file_path = file_upload.file.path
                 #request_id = transcription_processor.add_to_queue(uploaded_file_path)
-
                 #return JsonResponse({"message": "File uploaded successfully!", "request_id": request_id}, status=200)
-                return JsonResponse({"message": "File uploaded successfully!", "path": uploaded_file_path}, status=200)
+                return JsonResponse({"message": "File uploaded successfully!", "file_url": file_url, "file_path": file_path}, status=200)
             else:
                 return Response(file_serializer.errors, status=400)
         else:
@@ -58,6 +58,28 @@ class SilenceThresholdView(APIView):
                 return Response(silence_threshold_serializer.errors, status=400)
         else:
             return Response("No silence threshold data.", status=400)
+
+
+class ResetRecordingView(APIView):
+    parser_classes = (MultiPartParser, FormParser)
+
+    def post(self, request, *args, **kwargs):
+        #print(request.data)
+        if request.data and request.data.get('file_path'):
+            # parse file_url from data
+            file_path_serializer = RecordingFilePathSerializer(data={'file_path': request.data.get('file_path')})
+            if file_path_serializer.is_valid():
+                file_path = file_path_serializer.validated_data['file_path']
+                #print(file_path)
+                # delete file
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+                    print(f"Removed file: {file_path}")
+                return JsonResponse({"message": "Recoding successfully deleted!", "file_url": file_path}, status=200)
+            else:
+                return Response(file_path_serializer.errors, status=400)
+        else:
+            return Response("No file_url data.", status=400)
 
 
 class GetTranscriptionsView(APIView):
@@ -95,6 +117,35 @@ class GetTranscriptionsView(APIView):
             return Response(serializer.errors, status=400)
         return Response({'error': 'No requestId data provided'}, status=400)
 
+
+def serve_file(request, path):
+    #print("Serve file view")
+    # Determine the base directory based on the URL prefix
+    # TODO: redo serve file path logic
+    if request.path.startswith('/work/'):
+        base_dir = '/work'  # the files are saved here on UCloud
+    elif 'media/TRANSCRIPTIONS' in request.path:
+        base_dir = os.path.join(settings.MEDIA_ROOT, 'TRANSCRIPTIONS/')
+    elif 'UPLOADS/INPUT' in request.path:
+        # Open the file and create the response
+        with open(request.path, 'rb') as f:
+            response = HttpResponse(f.read(), content_type='application/octet-stream')
+            response['Content-Disposition'] = 'attachment; filename="{}"'.format(os.path.basename(request.path))
+            return response
+    else:
+        raise Http404("File not found")
+
+    # Construct the full file path
+    file_path = os.path.join(base_dir, path)
+    # Check if the file exists
+    if not os.path.exists(file_path):
+        raise Http404("File not found")
+
+    # Open the file and create the response
+    with open(file_path, 'rb') as f:
+        response = HttpResponse(f.read(), content_type='application/octet-stream')
+        response['Content-Disposition'] = 'attachment; filename="{}"'.format(os.path.basename(file_path))
+        return response
 
 def reset_data(request):
     # clear the transcription texts

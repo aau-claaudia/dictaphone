@@ -156,3 +156,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Initialize the transcription processor (load whisper model)
 transcription_processor = TranscriptionProcessor(model_name="turbo")
+
+# Add Celery configuration
+CELERY_BROKER_URL = 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'

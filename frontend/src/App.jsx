@@ -24,10 +24,8 @@ const App = () => {
     const requestIdsRef = useRef(requestIds);
     const [transcriptions, setTranscriptions] = useState([]); // Store transcriptions
     const [showSettings, setShowSettings] = useState(false);
-    const [silenceThreshold, setSilenceThreshold] = useState(-30);
-    const [silenceGap, setSilenceGap] = useState(1700);
     const [sections, setSections] = useState([
-        { title: "Recording Section 1", isRecording: false, audioLevel: 0, duration: 0, animationFrameId: null },
+        { title: "Recording Section 1", isRecording: false, audioLevel: 0, duration: 0, animationFrameId: null, titleLocked: false, audioUrl: null, audioPath: null },
     ]);
 
     useEffect(() => {
@@ -42,7 +40,10 @@ const App = () => {
             title: `Recording Section ${sections.length + 1}`,
             isRecording: false,
             audioLevel: 0,
-            duration: 0
+            duration: 0,
+            titleLocked: false,
+            audioUrl: null,
+            audioPath: null
         }]);
     };
 
@@ -61,16 +62,6 @@ const App = () => {
         updatedSections[index].isRecording = true;
         updatedSections[index].startTime = Date.now(); // Record the start time
         setSections(updatedSections);
-
-        // Simulate audio level updates
-        /*const interval = setInterval(() => {
-            const now = Date.now();
-            const elapsed = Math.floor((now - updatedSections[index].startTime) / 1000); // Duration in seconds
-            updatedSections[index].duration = elapsed;
-            updatedSections[index].audioLevel = Math.random(); // Simulate audio level (0 to 1)
-            setSections([...updatedSections]);
-        }, 1000);
-        updatedSections[index].intervalId = interval; // Save the interval ID for stopping later*/
 
         // Request access to the microphone
         const streamInstance = await navigator.mediaDevices.getUserMedia({
@@ -119,10 +110,11 @@ const App = () => {
                         body: formData,
                     });
                     if (response.ok) {
-                        const queueRequestData = await response.json();
-                        console.debug(queueRequestData);
-                        // Add the request ID to the state
-                        //setRequestIds((prevIds) => [...prevIds, queueRequestData.request_id]);
+                        const fileData = await response.json();
+                        console.debug(fileData);
+                        updatedSections[index].audioUrl = fileData.file_url;
+                        updatedSections[index].audioPath = fileData.file_path;
+                        setSections(updatedSections);
                     }
                     audioChunks = [];
                 } catch (e) {
@@ -156,12 +148,17 @@ const App = () => {
         //let id = setInterval(pollTranscriptions, 5000);
         //console.debug("Interval id from setInterval: " + id);
         //setIntervalId(id);
+        // request id update code:
+        // Add the request ID to the state
+        //setRequestIds((prevIds) => [...prevIds, queueRequestData.request_id]);
     };
 
     const stopRecording = (index) => {
         const updatedSections = [...sections];
         updatedSections[index].isRecording = false;
         updatedSections[index].audioLevel = 0;
+        // Lock the title after recording so that the file name can be used for file processing with backend
+        updatedSections[index].titleLocked = true;
         setSections(updatedSections);
         setRecording(false);
         if (updatedSections[index].animationFrameId) {
@@ -357,6 +354,38 @@ const App = () => {
         setLanguage(language)
     }
 
+    const resetRecording = async (file_path, index) => {
+        // delete the recording in the backend
+        console.debug("Deleting recording: " + file_path);
+        // Prepare the form data
+        const formData = new FormData();
+        formData.append("file_path", file_path);
+        try {
+            const response = await fetch("http://localhost:8000/reset-recording/", {
+                method: "POST",
+                credentials: 'include', // Include cookies
+                headers: {
+                    'X-CSRFToken': csrfToken, // Include the CSRF token
+                },
+                body: formData,
+            });
+            if (response.ok) {
+                const responseData = await response.json();
+                console.debug(responseData);
+            }
+        } catch (e) {
+            // Handle network errors
+            console.debug("Error deleting recording: " + e);
+        }
+        const updatedSections = [...sections];
+        // unlock the title after resetting the recording so that the user can rename if needed
+        updatedSections[index].titleLocked = false;
+        // reset the audio url
+        updatedSections[index].audioUrl = null;
+        updatedSections[index].audioPath = null;
+        setSections(updatedSections);
+    }
+
     return (
         <div className='App'>
             <h1>Dictaphone prototype</h1>
@@ -388,21 +417,22 @@ const App = () => {
                                 className="section-title-input"
                                 maxLength="30" // Limit to 30 characters
                                 placeholder="Enter title"
+                                disabled={section.titleLocked}
                             />
                             <button className="add-section-button" onClick={addSection}>+</button>
                         </div>
                         <div className="recording-content">
                             <button className="transcribe-button" onClick={() => startRecording(index)}
-                                    disabled={section.isRecording}>
+                                    disabled={section.isRecording || section.audioUrl}>
                                 Start recording
                             </button>
                             <button className="transcribe-stop-button" onClick={() => stopRecording(index)}
                                     disabled={!section.isRecording}>
                                 Stop recording
                             </button>
-                            <button className="transcribe-stop-button" onClick={() => console.debug("test")}
-                                    disabled={true}>
-                                Play recording
+                            <button className="transcribe-stop-button" onClick={() => resetRecording(section.audioPath, index)}
+                                    disabled={section.isRecording || !section.audioUrl}>
+                                Reset recording
                             </button>
                             <div className="audio-level-container">
                                 <label htmlFor={`audio-level-${index}`}>Audio Level:</label>
@@ -417,9 +447,18 @@ const App = () => {
                                 <label>Duration: </label>
                                 <span>{formatDuration(section.duration)}</span>
                             </div>
+                            {section.audioUrl && (
+                                <audio
+                                    controls
+                                    src={section.audioUrl}
+                                    style={{width: "100%", marginTop: "10px"}}
+                                >
+                                    Your browser does not support the audio element.
+                                </audio>
+                            )}
                             <div style={{marginTop: 10}}>
                                 <button className="transcribe-button" onClick={() => console.debug("test")}
-                                        disabled={true}>
+                                        disabled={section.isRecording || !section.audioUrl}>
                                     Start transcription
                                 </button>
                                 <button className="transcribe-stop-button" onClick={() => console.debug("test")}

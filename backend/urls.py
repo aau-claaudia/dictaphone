@@ -15,8 +15,8 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
-from dictaphone.views import index, FileUploadView, GetTranscriptionsView, reset_data, SilenceThresholdView
+from django.urls import path, re_path
+from dictaphone.views import index, FileUploadView, GetTranscriptionsView, reset_data, ResetRecordingView, SilenceThresholdView, serve_file
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -24,5 +24,9 @@ urlpatterns = [
     path('get-transcriptions/', GetTranscriptionsView.as_view(), name="get_transcriptions"),
     path('update-silence-threshold/', SilenceThresholdView.as_view(), name="update_silence_threshold"),
     path('reset-data/', reset_data, name="reset_data"),
-    path('', index, name='index'),  # Example route
+    path('reset-recording/', ResetRecordingView.as_view(), name="reset_recording"),
+    re_path(r'^.*media/UPLOADS/INPUT/(?P<path>.*)$', serve_file, name='serve_media_file'), # pattern for download
+    re_path(r'^.*media/TRANSCRIPTIONS/(?P<path>.*)$', serve_file, name='serve_media_file'), # pattern for download
+    re_path(r'^work/(?P<path>.*)$', serve_file, name='serve_work_file'), # pattern for download
+    re_path(r'^.*$', index, name='index'),  # Catch-all pattern to serve the React app
 ]

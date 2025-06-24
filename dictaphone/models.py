@@ -10,3 +10,6 @@ class RequestIdJson(models.Model):
 
 class SilenceThreshold(models.Model):
     silence_threshold = models.IntegerField(blank=False, null=False)
+
+class RecordingFilePath(models.Model):
+    file_path = models.CharField(max_length=255, blank=False, null=False)
