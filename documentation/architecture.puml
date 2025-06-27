@@ -1,0 +1,44 @@
+@startuml
+actor User as U
+participant "Browser" as BR
+box "Web App in UCloud container" #LightBlue
+participant "React Frontend" as RF
+end box
+box "Secure storage in UCloud Container" #LightGreen
+participant "Django Server" as DS
+participant "Celery Task Manager" as C
+end box
+
+U -> BR: Start recording
+BR -> U: Request access to mic
+U -> BR: Grant access to mic
+BR -> RF: Start recording
+loop Stream data: 10 second audio chunk
+    activate DS
+    RF -> DS: Save data chunk
+end
+deactivate DS
+U -> BR: Stop recording
+BR -> RF: Stop recording
+RF -> DS: Proces data
+activate DS
+DS -> DS: Assemble audio file
+DS -> C: Create transcription task
+deactivate DS
+activate C
+C -> DS: Transcription task id
+DS -> RF: Transcription task id
+RF -> BR: Data size and ETA
+BR -> U: Data size and ETA
+
+loop Polling for transcription status
+    RF -> DS: Poll transcription status
+    DS -> C: Poll transcription status
+    C -> DS: Transcription status / links
+    deactivate C
+    DS -> RF: Transcription status / links
+end
+RF -> BR: Transcription status / links
+BR -> U: Transcription status / links
+
+@enduml

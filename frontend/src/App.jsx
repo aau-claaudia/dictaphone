@@ -27,6 +27,7 @@ const App = () => {
     const [sections, setSections] = useState([
         { title: "Recording Section 1", isRecording: false, audioLevel: 0, duration: 0, animationFrameId: null, titleLocked: false, audioUrl: null, audioPath: null },
     ]);
+    const [currentSection, setCurrentSection] = useState(0);
 
     useEffect(() => {
         sessionStorage.setItem("modelSize", JSON.stringify(modelSize))
@@ -35,16 +36,31 @@ const App = () => {
         sessionStorage.setItem("language", JSON.stringify(language))
     }, [language]);
 
+    const goToPreviousSection = () => {
+        setCurrentSection((prev) => Math.max(prev - 1, 0));
+    };
+
+    const goToNextSection = () => {
+        setCurrentSection((prev) => Math.min(prev + 1, sections.length - 1));
+    };
+
     const addSection = () => {
-        setSections([...sections, {
-            title: `Recording Section ${sections.length + 1}`,
-            isRecording: false,
-            audioLevel: 0,
-            duration: 0,
-            titleLocked: false,
-            audioUrl: null,
-            audioPath: null
-        }]);
+        setSections((prevSections) => {
+            const newSections = [
+                ...prevSections,
+                {
+                    title: `Recording Section ${prevSections.length + 1}`,
+                    isRecording: false,
+                    audioLevel: 0,
+                    duration: 0,
+                    titleLocked: false,
+                    audioUrl: null,
+                    audioPath: null
+                }
+            ];
+            setCurrentSection(newSections.length - 1); // Navigate to new section
+            return newSections;
+        });
     };
 
     const handleTitleChange = (e, index) => {
@@ -407,74 +423,84 @@ const App = () => {
             }
 
             <div>
-                {sections.map((section, index) => (
-                    <div key={index} className="recording-section">
-                        <div className="recording-header">
-                            <input
-                                type="text"
-                                value={section.title}
-                                onChange={(e) => handleTitleChange(e, index)}
-                                className="section-title-input"
-                                maxLength="30" // Limit to 30 characters
-                                placeholder="Enter title"
-                                disabled={section.titleLocked}
-                            />
-                            <button className="add-section-button" onClick={addSection}>+</button>
-                        </div>
-                        <div className="recording-content">
-                            <button className="transcribe-button" onClick={() => startRecording(index)}
-                                    disabled={section.isRecording || section.audioUrl}>
-                                Start recording
-                            </button>
-                            <button className="transcribe-stop-button" onClick={() => stopRecording(index)}
-                                    disabled={!section.isRecording}>
-                                Stop recording
-                            </button>
-                            <button className="transcribe-stop-button" onClick={() => resetRecording(section.audioPath, index)}
-                                    disabled={section.isRecording || !section.audioUrl}>
-                                Reset recording
-                            </button>
-                            <div className="audio-level-container">
-                                <label htmlFor={`audio-level-${index}`}>Audio Level:</label>
-                                <progress
-                                    id={`audio-level-${index}`}
-                                    className="audio-level-gauge"
-                                    value={section.audioLevel}
-                                    max="1"
-                                ></progress>
-                            </div>
-                            <div className="recording-duration">
-                                <label>Duration: </label>
-                                <span>{formatDuration(section.duration)}</span>
-                            </div>
-                            {section.audioUrl && (
-                                <audio
-                                    controls
-                                    src={section.audioUrl}
-                                    style={{width: "100%", marginTop: "10px"}}
-                                >
-                                    Your browser does not support the audio element.
-                                </audio>
-                            )}
-                            <div style={{marginTop: 10}}>
-                                <button className="transcribe-button" onClick={() => console.debug("test")}
-                                        disabled={section.isRecording || !section.audioUrl}>
-                                    Start transcription
-                                </button>
-                                <button className="transcribe-stop-button" onClick={() => console.debug("test")}
-                                        disabled={true}>
-                                    Stop transcription
-                                </button>
-                            </div>
-                            <h3>Transcription Status</h3>
-                            <p>Here the status will be shown.</p>
-                            <h3>Transcribed text</h3>
-                            <p>Here the transcribed text will be available.</p>
-                        </div>
+                <div className="recording-section">
+                    <div className="recording-header">
+                        <input
+                            type="text"
+                            value={sections[currentSection].title}
+                            onChange={(e) => handleTitleChange(e, currentSection)}
+                            className="section-title-input"
+                            maxLength="30" // Limit to 30 characters
+                            placeholder="Enter title"
+                            disabled={sections[currentSection].titleLocked}
+                        />
+                        <button className="add-section-button" onClick={addSection} title="Add new recording">+</button>
                     </div>
-                ))}
+                    <div className="recording-content">
+                        <button className="transcribe-button" onClick={() => startRecording(currentSection)}
+                                disabled={sections[currentSection].isRecording || sections[currentSection].audioUrl}>
+                            Start recording
+                        </button>
+                        <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection)}
+                                disabled={!sections[currentSection].isRecording}>
+                            Stop recording
+                        </button>
+                        <button className="transcribe-stop-button"
+                                onClick={() => resetRecording(sections[currentSection].audioPath, currentSection)}
+                                disabled={sections[currentSection].isRecording || !sections[currentSection].audioUrl}>
+                            Reset recording
+                        </button>
+                        <div className="audio-level-container">
+                            <label htmlFor={`audio-level-${currentSection}`}>Audio Level:</label>
+                            <progress
+                                id={`audio-level-${currentSection}`}
+                                className="audio-level-gauge"
+                                value={sections[currentSection].audioLevel}
+                                max="1"
+                            ></progress>
+                        </div>
+                        <div className="recording-duration">
+                            <label>Duration: </label>
+                            <span>{formatDuration(sections[currentSection].duration)}</span>
+                        </div>
+                        {sections[currentSection].audioUrl && (
+                            <audio
+                                controls
+                                src={sections[currentSection].audioUrl}
+                                style={{width: "100%", marginTop: "10px"}}
+                            >
+                                Your browser does not support the audio element.
+                            </audio>
+                        )}
+                        <div style={{marginTop: 10}}>
+                            <button className="transcribe-button" onClick={() => console.debug("test")}
+                                    disabled={sections[currentSection].isRecording || !sections[currentSection].audioUrl}>
+                                Start transcription
+                            </button>
+                            <button className="transcribe-stop-button" onClick={() => console.debug("test")}
+                                    disabled={true}>
+                                Stop transcription
+                            </button>
+                        </div>
+                        <h3>Transcription Status</h3>
+                        <p>Here the status will be shown.</p>
+                        <h3>Transcribed text</h3>
+                        <p>Here the transcribed text will be available.</p>
+                    </div>
+                    <div className="section-navigation"
+                         style={{display: "flex", justifyContent: "center", marginTop: 20}}>
+                        <button onClick={goToPreviousSection} disabled={currentSection === 0}>
+                            Previous
+                        </button>
+                        <span style={{margin: "0 10px"}}>
+                                Recording {currentSection + 1} of {sections.length}
+                            </span>
+                        <button onClick={goToNextSection} disabled={currentSection === sections.length - 1}>
+                            Next
+                        </button>
+                    </div>
+                </div>
             </div>
-
         </div>
     );
 };

@@ -109,7 +109,9 @@ h1 {
 }
 
 .add-section-button {
-  background-color: darkgreen; /* Blue button */
+  background-color: darkgreen;
+  bottom: 2%;
+  right: 2%;
   color: white;
   border: none;
   border-radius: 50%;
