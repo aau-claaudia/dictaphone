@@ -1,4 +1,5 @@
 @startuml
+title Dictaphone Recording and Transcription Flow
 actor User as U
 participant "Browser" as BR
 box "Web App in UCloud container" #LightBlue
@@ -9,36 +10,58 @@ participant "Django Server" as DS
 participant "Celery Task Manager" as C
 end box
 
+
 U -> BR: Start recording
 BR -> U: Request access to mic
 U -> BR: Grant access to mic
 BR -> RF: Start recording
-loop Stream data: 10 second audio chunk
-    activate DS
-    RF -> DS: Save data chunk
+activate RF
+RF -> DS: Start recording
+activate DS
+DS -> DS: Prepare data transfer
+DS -> RF: Ack. [RecID, SessionID]
+RF -> RF: Update UI state: recording
+loop
+    RF -> DS: Send chunk [RecID, SessionID, index]
+    DS -> DS: Check chunk index
+    DS -> RF: Acknowledge chunk received
+    RF -> RF: Delete chunk data on Ack.
+    DS --> RF: Request missing chunk (if necessary)
+    RF --> DS: Re-send missing chunk (if necessary)
 end
-deactivate DS
 U -> BR: Stop recording
 BR -> RF: Stop recording
-RF -> DS: Proces data
-activate DS
-DS -> DS: Assemble audio file
-DS -> C: Create transcription task
-deactivate DS
-activate C
-C -> DS: Transcription task id
-DS -> RF: Transcription task id
-RF -> BR: Data size and ETA
-BR -> U: Data size and ETA
-
-loop Polling for transcription status
-    RF -> DS: Poll transcription status
-    DS -> C: Poll transcription status
-    C -> DS: Transcription status / links
-    deactivate C
-    DS -> RF: Transcription status / links
+RF -> DS: Stop recording
+DS -> RF: Ack. stop recording
+RF -> RF: Update UI state: Verifying data
+loop
+DS -> DS: Check chunk inventory
+DS --> RF: Request missing chunk (if necessary)
+RF --> DS: Re-send missing chunk (if necessary)
 end
-RF -> BR: Transcription status / links
-BR -> U: Transcription status / links
+DS -> RF: Data size and ETA
+RF -> RF: Update UI state: Size and ETA
+DS -> C: Create transcription task
+activate C
+C -> C: Transcribe
+C -> DS: Output files
+deactivate C
+DS -> RF: Output file links
+
+legend bottom
+Django Server Implementation requirements:
+
+Recording data management
+ - handle data chunks
+ - request missing chunks
+ - assemble audio file
+
+Monitoring
+ - detect broken connection
+
+Transcription service
+
+endlegend
+
 
 @enduml
