@@ -1,5 +1,5 @@
 @startuml
-title Dictaphone Recording and Transcription Flow
+title Dictaphone Recording and Transcription
 actor User as U
 participant "Browser" as BR
 box "Web App in UCloud container" #LightBlue
