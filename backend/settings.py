@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',
+    'channels',
     'dictaphone',
 ]
 
@@ -160,3 +161,11 @@ transcription_processor = TranscriptionProcessor(model_name="turbo")
 # Add Celery configuration
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
+
+# TODO: configuration for deployment? something else than im-mem
+# see https://channels.readthedocs.io/en/latest/deploying.html
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}

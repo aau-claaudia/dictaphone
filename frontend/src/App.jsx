@@ -28,6 +28,146 @@ const App = () => {
         { title: "Recording Section 1", isRecording: false, audioLevel: 0, duration: 0, animationFrameId: null, titleLocked: false, audioUrl: null, audioPath: null },
     ]);
     const [currentSection, setCurrentSection] = useState(0);
+    const [socket, setSocket] = useState(null);
+    const socketRef = useRef(null);
+    const [initiateRecordingFlag, setInitiateRecordingFlag] = useState(false);
+    const [recordingId, setRecordingId] = useState(null);
+
+    // TODO: state management, read state from session and server where appropriately
+
+    useEffect(() => {
+        // TODO: wss and authentication? authentication middleware
+        const ws = new WebSocket("ws://localhost:8001/ws/dictaphone/data/");
+        //const ws = new WebSocket("wss://localhost:8001/ws/dictaphone/data/");
+        ws.onopen = () => console.log("WebSocket connected");
+        ws.onclose = () => console.log("WebSocket disconnected");
+        // TODO: error handling, UI should be able show a proper message to the user
+        ws.onerror = (e) => console.error("WebSocket error", e);
+        ws.onmessage = (e) => receiveMessage(e);
+        socketRef.current = ws;
+        setSocket(ws);
+
+        // Clean up on unmount
+        return () => {
+            console.debug("Calling close...")
+            if (ws.readyState === WebSocket.OPEN) {
+                console.debug("Closing web socket connection.")
+                ws.close();
+            }
+        };
+    }, []);
+
+    const receiveMessage = async (message) => {
+        // client receives three types of messages
+        // 1) acknowledgments: this can be "ack_start_recording", "ack_stop_recording", "recording_complete" or "ack_chunk"
+        // 2) data_request: request a missing data chunk, "request_chunk"
+        // 3) output_files: transcribed files, "deliver_output"
+        try {
+            const data = JSON.parse(message.data);
+            if (data.message_type) {
+                console.debug("Message type received from backend: " + data.message_type);
+                switch (data.message_type) {
+                    case "ack_start_recording":
+                        // handle start recording acknowledgment
+                        if (data.recording_id) {
+                            let updatedRecordingId = data.recording_id;
+                            setRecordingId(updatedRecordingId);
+                            await startRecording(currentSection, updatedRecordingId);
+                        } else {
+                            console.debug("No recording id returned.");
+                        }
+                        break;
+                    case "ack_stop_recording":
+                        // handle stop recording acknowledgment
+                        break;
+                    case "ack_chunk":
+                        // handle chunk acknowledgment
+                        // TODO:
+                        console.debug("Chunk acknowledgment received.")
+                        if (data.chunk_index != null) {
+                            console.debug("Ack. chunk index: " + data.chunk_index);
+                        }
+                        break;
+                    case "recording_complete":
+                        // recording is verified to be complete from server (no missing chunks)
+                        // TODO: list of recordingIds? activeRecordingId?
+                        setRecordingId(null);
+                        break;
+                    case "request_chunk":
+                        // handle data request for missing chunk
+                        // TODO:
+                        break;
+                    case "deliver_output":
+                        // handle transcribed file links
+                        // TODO:
+                        break;
+                    default:
+                        // handle unknown types
+                        console.debug("Unknown message_type from backend (raw):", data);
+                        break;
+                }
+            } else {
+                console.debug("Message from backend (raw):", data);
+            }
+        } catch (e) {
+            // TODO: error handling
+            console.error("Failed to parse message from backend:", message.data);
+        }
+    }
+
+    const sendControlMessage = (message, parameter) => {
+        const ws = socketRef.current;
+        console.debug("Sending control message, socket state:", ws);
+        if (parameter) {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    'type': "control_message",
+                    'message': message,
+                    'parameter': parameter
+                }));
+            } else {
+                console.error("WebSocket is not open or not initialized.");
+            }
+        } else {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({
+                    'type': "control_message",
+                    'message': message
+                }));
+            } else {
+                console.error("WebSocket is not open or not initialized.");
+            }
+        }
+    }
+
+    const sendBinaryData = (data) => {
+        const ws = socketRef.current;
+        console.debug("Sending binary data, socket state:", ws);
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(data);
+        } else {
+            console.error("WebSocket is not open or not initialized.");
+        }
+    };
+
+    const sendMessage = () => {
+        socket.send(JSON.stringify({
+            'type': "control_message",
+            'message': "start_recording"
+        }))
+        socket.send(JSON.stringify({
+            'type': "acknowledgement",
+            'chunk_index': 0
+        }))
+    }
+
+    const createChunkHeader = (recordingId, chunkIndex) => {
+        const header = new ArrayBuffer(8);
+        const view = new DataView(header);
+        view.setUint32(0, recordingId);
+        view.setUint32(4, chunkIndex);
+        return header;
+    }
 
     useEffect(() => {
         sessionStorage.setItem("modelSize", JSON.stringify(modelSize))
@@ -73,7 +213,14 @@ const App = () => {
         inputElement.style.width = `${Math.max(inputElement.value.length * 0.6, 10)}em`;
     };
 
-    const startRecording = async (index) => {
+    const initiateRecording = () => {
+        setInitiateRecordingFlag(true);
+        sendControlMessage("start_recording", sections[currentSection].title);
+        // TODO: do I need anything here to show to the user this is being set up?
+        // TODO: maybe not (since it happens very fast) - maybe just errorhandling in case it takes to long or fails, will this be handle by general error handling when the serer is not responding?
+    }
+
+    const startRecording = async (index, updatedRecordingId) => {
         const updatedSections = [...sections];
         updatedSections[index].isRecording = true;
         updatedSections[index].startTime = Date.now(); // Record the start time
@@ -95,49 +242,31 @@ const App = () => {
         setAnalyser(analyserInstance)
         const mediaRecorderInstance = new MediaRecorder(streamInstance,{ mimeType: 'audio/wav' });
         setMediaRecorder(mediaRecorderInstance);
-        let audioChunks = [];
+        setInitiateRecordingFlag(false);
+        setRecording(true);
 
+        let chunkIndex = 0;
         mediaRecorderInstance.ondataavailable = (event) => {
             if (event.data.size > 0) {
-                console.debug("Pushing data chunk to buffer array.")
-                audioChunks.push(event.data);
+                console.debug("Sending binary data to backend.")
+                // 1. Create header
+                const header = createChunkHeader(updatedRecordingId, chunkIndex);
+                // 2. Read audio chunk as ArrayBuffer and concatenate
+                event.data.arrayBuffer().then(dataBuffer => {
+                    // 3. Concatenate header and data
+                    const totalLength = header.byteLength + dataBuffer.byteLength;
+                    const combined = new Uint8Array(totalLength);
+                    combined.set(new Uint8Array(header), 0);
+                    combined.set(new Uint8Array(dataBuffer), header.byteLength);
+                    // 4. Send through WebSocket
+                    sendBinaryData(combined.buffer);
+                });
+                chunkIndex += 1;
             }
         };
 
         mediaRecorderInstance.onstop = async () => {
-            console.debug("Capturing audio, size of array: ", audioChunks.length);
-            // Process or save the audio chunks here
-            if (audioChunks.length > 0) {
-                const body = new Blob(audioChunks, { type: "audio/wav" })
-                // Prepare the form data
-                const formData = new FormData();
-                // TODO: handle empty filename (validation in UI - also lock title name after recording has started?)
-                formData.append("audio_chunk", body, (updatedSections[index].title + ".wav"));
-
-                //TODO: use relative links and proxy
-                try {
-                    // TODO: add upload progress on file
-                    const response = await fetch("http://localhost:8000/upload-audio-chunk/", {
-                        method: "POST",
-                        credentials: 'include', // Include cookies
-                        headers: {
-                            'X-CSRFToken': csrfToken, // Include the CSRF token
-                        },
-                        body: formData,
-                    });
-                    if (response.ok) {
-                        const fileData = await response.json();
-                        console.debug(fileData);
-                        updatedSections[index].audioUrl = fileData.file_url;
-                        updatedSections[index].audioPath = fileData.file_path;
-                        setSections(updatedSections);
-                    }
-                    audioChunks = [];
-                } catch (e) {
-                    // Handle network errors
-                    console.debug("Error sending audio data to backend: " + e);
-                }
-            }
+            console.debug("Media recorder onstop().");
         };
 
         const dataArray = new Uint8Array(analyserInstance.frequencyBinCount);
@@ -157,16 +286,9 @@ const App = () => {
             updatedSections[index].animationFrameId = animationFrameRequestId;
         }
         checkAudioLevel();
-        setRecording(true);
-        mediaRecorderInstance.start(10000)
-        // TODO: poll scheduling code needed later
-        //console.debug("Scheduling poll function.");
-        //let id = setInterval(pollTranscriptions, 5000);
-        //console.debug("Interval id from setInterval: " + id);
-        //setIntervalId(id);
-        // request id update code:
-        // Add the request ID to the state
-        //setRequestIds((prevIds) => [...prevIds, queueRequestData.request_id]);
+        // TODO: create test data for the backend with 3 s. packets (5 packets?), add header before sending
+        mediaRecorderInstance.start(3000)
+        //mediaRecorderInstance.start(10000)
     };
 
     const stopRecording = (index) => {
@@ -195,6 +317,8 @@ const App = () => {
             console.debug("Stopping the stream...");
             mediaStream.getTracks().forEach(track => track.stop());
         }
+        console.debug("Stopped recording, sending control message.");
+        sendControlMessage("stop_recording", null)
     };
 
     const formatDuration = (seconds) => {
@@ -337,31 +461,6 @@ const App = () => {
         setShowSettings(!showSettings);
     }
 
-    const onUpdateSilenceThreshold = async (threshold) => {
-        console.debug("Updating the silence threshold, sending data: " + threshold)
-        // Prepare the form data
-        const formData = new FormData();
-        formData.append("silence_threshold", threshold);
-        try {
-            const response = await fetch("http://localhost:8000/update-silence-threshold/", {
-                method: "POST",
-                credentials: 'include', // Include cookies
-                headers: {
-                    'X-CSRFToken': csrfToken, // Include the CSRF token
-                },
-                body: formData,
-            });
-            if (response.ok) {
-                const responseData = await response.json();
-                console.debug(responseData);
-            }
-        } catch (e) {
-            // Handle network errors
-            console.debug("Error updating silence threshold: " + e);
-        }
-        setSilenceThreshold(parseInt(threshold, 10));
-    }
-
     const onUpdateModel = (modelSize) => {
         setModelSize(modelSize)
     }
@@ -437,17 +536,17 @@ const App = () => {
                         <button className="add-section-button" onClick={addSection} title="Add new recording">+</button>
                     </div>
                     <div className="recording-content">
-                        <button className="transcribe-button" onClick={() => startRecording(currentSection)}
-                                disabled={sections[currentSection].isRecording || sections[currentSection].audioUrl}>
+                        <button className="transcribe-button" onClick={() => initiateRecording(currentSection)}
+                                disabled={recording || sections[currentSection].audioUrl}>
                             Start recording
                         </button>
                         <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection)}
-                                disabled={!sections[currentSection].isRecording}>
+                                disabled={!recording}>
                             Stop recording
                         </button>
                         <button className="transcribe-stop-button"
                                 onClick={() => resetRecording(sections[currentSection].audioPath, currentSection)}
-                                disabled={sections[currentSection].isRecording || !sections[currentSection].audioUrl}>
+                                disabled={recording || !sections[currentSection].audioUrl}>
                             Reset recording
                         </button>
                         <div className="audio-level-container">
@@ -474,7 +573,7 @@ const App = () => {
                         )}
                         <div style={{marginTop: 10}}>
                             <button className="transcribe-button" onClick={() => console.debug("test")}
-                                    disabled={sections[currentSection].isRecording || !sections[currentSection].audioUrl}>
+                                    disabled={recording || !sections[currentSection].audioUrl}>
                                 Start transcription
                             </button>
                             <button className="transcribe-stop-button" onClick={() => console.debug("test")}
@@ -499,6 +598,12 @@ const App = () => {
                             Next
                         </button>
                     </div>
+                </div>
+                <div>
+                    <h2>Test button for testing websockets</h2>
+                    <button className="transcribe-button" onClick={() => sendMessage()}>
+                        Test send message
+                    </button>
                 </div>
             </div>
         </div>
