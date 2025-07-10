@@ -25,7 +25,6 @@ class TestAudioChunkManager(unittest.TestCase):
             'created': None,
             'title': "test",
             'status': 'active',
-            'wav_header': None,
             'flushed_index': None,
             'chunks': {},
             'recording_file_path': str(self.output_file)

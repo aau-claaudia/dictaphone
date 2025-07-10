@@ -29,7 +29,6 @@ class AudioChunkManager:
                 'created': datetime.datetime.now(),
                 'title': title,
                 'status': 'active',
-                'wav_header': None,
                 'flushed_index': None, # how much of the file has been assembled
                 'chunks': {}
             }
@@ -65,26 +64,9 @@ class AudioChunkManager:
             new_chunk = {
                 'index': index,
                 'timestamp': datetime.datetime.now(),
-                'flushed': False
+                'flushed': False,
+                'data': data
             }
-
-            if index == 0:
-                # if first chunk extract wav header
-                print("Extracting wav header.")
-                wav_header = data[:44]
-                self.recordings[recording_id]['wav_header'] = wav_header
-                new_chunk['data'] = data
-                new_chunk['has_header'] = True
-            else:
-                # add header if possible
-                if self.recordings[recording_id]['wav_header'] is not None:
-                    print("Adding wav header to chunk.")
-                    new_chunk['data'] = self.recordings[recording_id]['wav_header'] + data
-                    new_chunk['has_header'] = True
-                else:
-                    print("Adding chunk without header.")
-                    new_chunk['data'] = data
-                    new_chunk['has_header'] = False
 
             # save chunk
             self.recordings[recording_id]['chunks'][index] = new_chunk
@@ -123,29 +105,12 @@ class AudioChunkManager:
             # check if the next in-order chunk is available
             if next_in_order_chunk in self.recordings[self.active_recording_id]['chunks']:
                 print(f"Writing chunk with index = {next_in_order_chunk}")
-                # make backup of data file (overwrite existing backup)
-                backup_file_path = self.recordings[self.active_recording_id]['recording_file_path'] + '_backup.wav'
-                shutil.copyfile(self.recordings[self.active_recording_id]['recording_file_path'], backup_file_path)
-                data_to_write = None
-                # insert wav header if needed
-                if not self.recordings[self.active_recording_id]['chunks'][next_in_order_chunk]['has_header']:
-                    data_to_write = (self.recordings[self.active_recording_id]['wav_header'] +
-                                     self.recordings[self.active_recording_id]['chunks'][next_in_order_chunk]['data'])
-                else:
-                    data_to_write = self.recordings[self.active_recording_id]['chunks'][next_in_order_chunk]['data']
+                data_to_write = self.recordings[self.active_recording_id]['chunks'][next_in_order_chunk]['data']
+
                 # write the audio data to file
-                audio_data = []
-                # append existing data
-                with wave.open(self.recordings[self.active_recording_id]['recording_file_path'], "rb") as w:
-                    audio_data.append([w.getparams(), w.readframes(w.getnframes())])
-                # append new data
-                with wave.open(io.BytesIO(data_to_write), "rb") as w:
-                    audio_data.append([w.getparams(), w.readframes(w.getnframes())])
-                # replace working file
-                with wave.open(self.recordings[self.active_recording_id]['recording_file_path'], "wb") as output:
-                    output.setparams(audio_data[0][0])
-                    for params, frames in audio_data:
-                        output.writeframes(frames)
+                with open(self.recordings[self.active_recording_id]['recording_file_path'], "ab") as f:
+                    f.write(data_to_write)
+
                 # remove data from memory
                 self.recordings[self.active_recording_id]['chunks'][next_in_order_chunk]['flushed'] = True
                 self.recordings[self.active_recording_id]['chunks'][next_in_order_chunk]['data'] = {}
