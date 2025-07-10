@@ -216,7 +216,7 @@ const App = () => {
     const initiateRecording = () => {
         setInitiateRecordingFlag(true);
         sendControlMessage("start_recording", sections[currentSection].title);
-        // TODO: do I need anything here to show to the user this is being set up?
+        // TODO: do I need anything here to show to the user this is being set up? Maybe a spinner on the button. Or disable the start button, while wait with enabling the stop button (this already happens).
         // TODO: maybe not (since it happens very fast) - maybe just errorhandling in case it takes to long or fails, will this be handle by general error handling when the serer is not responding?
     }
 
@@ -537,7 +537,7 @@ const App = () => {
                     </div>
                     <div className="recording-content">
                         <button className="transcribe-button" onClick={() => initiateRecording(currentSection)}
-                                disabled={recording || sections[currentSection].audioUrl}>
+                                disabled={recording || sections[currentSection].audioUrl || initiateRecordingFlag}>
                             Start recording
                         </button>
                         <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection)}

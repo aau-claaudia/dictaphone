@@ -17,7 +17,7 @@ class AudioChunkManager:
         self.recordings = {}
         self.lock = threading.Lock()  # Lock to ensure thread-safe properties
 
-    def start_new_recording(self, title) -> str:
+    def start_new_recording(self, title) -> int:
         with self.lock:
             print(f"Starting new recording, ID = {self.active_recording_id}")
             if self.active_recording_id in self.recordings:
@@ -77,7 +77,7 @@ class AudioChunkManager:
                 new_chunk['has_header'] = True
             else:
                 # add header if possible
-                if 'wav_header' in self.recordings[recording_id]:
+                if self.recordings[recording_id]['wav_header'] is not None:
                     print("Adding wav header to chunk.")
                     new_chunk['data'] = self.recordings[recording_id]['wav_header'] + data
                     new_chunk['has_header'] = True
@@ -227,6 +227,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             header = bytes_data[:8]
             recording_id, chunk_index = struct.unpack(">II", header)  # Big-endian unsigned ints
             audio_data = bytes_data[8:]  # contains the audio chunk
+            #save_audio_data_for_test(bytes_data, recording_id, chunk_index, True)
+            #save_audio_data_for_test(audio_data, recording_id, chunk_index, False)
             print(f"Byte data received - header data - Rec. ID = {recording_id} chunk_index = {chunk_index}")
             # TODO: handle ValueError (add_chunk), logging
             self.chunk_manager.add_chunk(recording_id, chunk_index, audio_data)
@@ -238,3 +240,21 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
 
     async def send_to_client(self, json_object):
         await self.send(text_data=json.dumps(json_object))
+
+
+def save_audio_data_for_test(audio_data, recording_id, chunk_index, includes_header, directory="dictaphone/resources/test_chunks"):
+    """
+    Saves a chunk of audio data to a file for testing.
+    includes_header: Is the transport header with recording_id and chunk_index included in the data
+    The file will be named as: chunk_{recording_id}_{chunk_index}.raw
+    or chunk_{recording_id}_{chunk_index}_header.raw
+    """
+    os.makedirs(directory, exist_ok=True)
+    if includes_header:
+        filename = f"chunk_{recording_id}_{chunk_index}_header.raw"
+    else:
+        filename = f"chunk_{recording_id}_{chunk_index}.raw"
+    filepath = os.path.join(directory, filename)
+    with open(filepath, "wb") as f:
+        f.write(audio_data)
+    print(f"Saved chunk to {filepath}")
