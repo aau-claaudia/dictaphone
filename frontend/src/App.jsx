@@ -14,6 +14,9 @@ const App = () => {
     const [modelSize, setModelSize] = useState(getInitialString("modelSize", "large-v3"))
     const [language, setLanguage] = useState(getInitialString("language", "auto"))
     const [recording, setRecording] = useState(false);
+    const chunkIndexRef = useRef(0);
+    const [finalizing, setFinalizing] = useState(false);
+    const finalizingRef = useRef(finalizing);
     const recordingRef = useRef(recording);
     const [mediaRecorder, setMediaRecorder] = useState(null);
     const [mediaStream, setMediaStream] = useState(null);
@@ -57,11 +60,16 @@ const App = () => {
         };
     }, []);
 
+    // Keep the ref updated with the latest finalizing value
+    useEffect(() => {
+        finalizingRef.current = finalizing;
+    }, [finalizing]);
+
     const receiveMessage = async (message) => {
         // client receives three types of messages
         // 1) acknowledgments: this can be "ack_start_recording", "ack_stop_recording", "recording_complete" or "ack_chunk"
-        // 2) data_request: request a missing data chunk, "request_chunk"
-        // 3) output_files: transcribed files, "deliver_output"
+        // 2) data request: request a missing data chunk, "request_chunk"
+        // 3) output files: transcribed files, "transcribed_file"
         try {
             const data = JSON.parse(message.data);
             if (data.message_type) {
@@ -77,9 +85,6 @@ const App = () => {
                             console.debug("No recording id returned.");
                         }
                         break;
-                    case "ack_stop_recording":
-                        // handle stop recording acknowledgment
-                        break;
                     case "ack_chunk":
                         // handle chunk acknowledgment
                         // TODO:
@@ -90,14 +95,21 @@ const App = () => {
                         break;
                     case "recording_complete":
                         // recording is verified to be complete from server (no missing chunks)
+                        // get the file size and ETA, update state to allow new recording
                         // TODO: list of recordingIds? activeRecordingId?
+                        console.debug("Recording complete received from server.")
+                        if (data.path != null && data.size != null) {
+                            console.debug("File path: " + data.path);
+                            console.debug("File size: " + data.size);
+                        }
                         setRecordingId(null);
+                        setFinalizing(false);
                         break;
                     case "request_chunk":
                         // handle data request for missing chunk
                         // TODO:
                         break;
-                    case "deliver_output":
+                    case "transcribed_file":
                         // handle transcribed file links
                         // TODO:
                         break;
@@ -149,17 +161,6 @@ const App = () => {
             console.error("WebSocket is not open or not initialized.");
         }
     };
-
-    const sendMessage = () => {
-        socket.send(JSON.stringify({
-            'type': "control_message",
-            'message': "start_recording"
-        }))
-        socket.send(JSON.stringify({
-            'type': "acknowledgement",
-            'chunk_index': 0
-        }))
-    }
 
     const createChunkHeader = (recordingId, chunkIndex) => {
         const header = new ArrayBuffer(8);
@@ -217,7 +218,7 @@ const App = () => {
         setInitiateRecordingFlag(true);
         sendControlMessage("start_recording", sections[currentSection].title);
         // TODO: do I need anything here to show to the user this is being set up? Maybe a spinner on the button. Or disable the start button, while wait with enabling the stop button (this already happens).
-        // TODO: maybe not (since it happens very fast) - maybe just errorhandling in case it takes to long or fails, will this be handle by general error handling when the serer is not responding?
+        // TODO: maybe not (since it happens very fast) - maybe just errorhandling in case it takes too long or fails, will this be handle by general error handling when the serer is not responding?
     }
 
     const startRecording = async (index, updatedRecordingId) => {
@@ -245,12 +246,12 @@ const App = () => {
         setInitiateRecordingFlag(false);
         setRecording(true);
 
-        let chunkIndex = 0;
+        chunkIndexRef.current = 0; // Reset chunk index for new recording
         mediaRecorderInstance.ondataavailable = (event) => {
             if (event.data.size > 0) {
                 console.debug("Sending binary data to backend.")
                 // 1. Create header
-                const header = createChunkHeader(updatedRecordingId, chunkIndex);
+                const header = createChunkHeader(updatedRecordingId, chunkIndexRef.current);
                 // 2. Read audio chunk as ArrayBuffer and concatenate
                 event.data.arrayBuffer().then(dataBuffer => {
                     // 3. Concatenate header and data
@@ -261,12 +262,16 @@ const App = () => {
                     // 4. Send through WebSocket
                     sendBinaryData(combined.buffer);
                 });
-                chunkIndex += 1;
+                chunkIndexRef.current += 1;
             }
         };
 
         mediaRecorderInstance.onstop = async () => {
-            console.debug("Media recorder onstop().");
+            console.debug("Media recorder onstop() event fired. All data chunks have been generated.");
+            // the recorder is fully stopped and the last chunk has been sent,
+            // notify the server that the recording is finished from the client side.
+            console.debug(`Sending stop_recording control message with total chunks: ${chunkIndexRef.current}`);
+            sendControlMessage("stop_recording", chunkIndexRef.current);
         };
 
         const dataArray = new Uint8Array(analyserInstance.frequencyBinCount);
@@ -299,26 +304,25 @@ const App = () => {
         updatedSections[index].titleLocked = true;
         setSections(updatedSections);
         setRecording(false);
+        setFinalizing(true);
         if (updatedSections[index].animationFrameId) {
             console.debug("Stopping the animation frame...");
             cancelAnimationFrame(updatedSections[index].animationFrameId);
         }
         if (mediaRecorder && mediaRecorder.state !== "inactive") {
             console.debug("Stopping the recording...");
-            mediaRecorder.stop(); // Stop the MediaRecorder
+            mediaRecorder.stop();
         } else {
             console.debug("MediaRecorder is not active or already stopped.");
         }
         if (analyser) {
             console.debug("Stopping the analyser...")
-            analyser.disconnect()
+            analyser.disconnect();
         }
         if (mediaStream) {
             console.debug("Stopping the stream...");
             mediaStream.getTracks().forEach(track => track.stop());
         }
-        console.debug("Stopped recording, sending control message.");
-        sendControlMessage("stop_recording", null)
     };
 
     const formatDuration = (seconds) => {
@@ -365,71 +369,6 @@ const App = () => {
             console.debug("Request ids after remove: " + updatedRequestIds);
             return updatedRequestIds;
         });
-    };
-
-    // Function to poll the server for transcription texts
-    const pollTranscriptions = () => {
-        // TODO: implement functionality to ensure the transcription text chunks are shown in correct order (use requestId -> increasing number)
-        console.debug("Running poll method with requestIds: " + requestIdsRef.current)
-        if (requestIdsRef.current.length > 0) {
-            const requestIdJson = [];
-            const formData = new FormData();
-            for (const requestId of requestIdsRef.current) {
-                requestIdJson.push({
-                    "request_id": requestId
-                })
-            }
-            formData.append('request_ids', JSON.stringify(requestIdJson))
-            console.debug("Generated request id JSON: " + requestIdJson)
-
-            fetch(`http://localhost:8000/get-transcriptions/`, {
-                method: "POST",
-                credentials: "include",
-                headers: {
-                    "X-CSRFToken": csrfToken,
-                },
-                body: formData,
-            })
-                .then(response => response.json())
-                .then(data => {
-                    // debug logging the data returned from the server
-                    console.debug('Response data: ', data.transcriptions);
-                    if (data.transcriptions) {
-                        for (const transcription of data.transcriptions) {
-                            if (transcription && transcription.transcription_text) {
-                                if (transcription.transcription_text === "SILENT_AUDIO_CHUNK") {
-                                    // the audio was detected as silent in the backend
-                                    console.debug("Silent audio chunk for requestId: " + transcription.request_id);
-                                } else if (transcription.transcription_confidence && isBelowConfidenceThreshold(transcription.transcription_confidence)) {
-                                    // the confidence is too low and most likely hallucination
-                                    console.debug("Hallucination detected in audio chunk.")
-                                    if (transcription.transcription_file_name) {
-                                        let text = "Inaudible sound - file name: " + transcription.transcription_file_name;
-                                        setTranscriptions((prev) => [...prev, text]);
-                                    }
-                                } else {
-                                    // the transcription text is okay
-                                    console.debug("Setting transcription text for requestId: " + transcription.request_id);
-                                    setTranscriptions((prev) => [...prev, transcription.transcription_text]);
-                                }
-                                // Remove the request ID from the polling list
-                                removeRequestId(transcription.request_id)
-                            } else {
-                                console.debug("Transcription text not ready for requestId: " + transcription.request_id)
-                            }
-                        }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error polling backend:', error);
-                });
-        } else {
-            console.debug("No request ids to send.")
-            if (!recordingRef.current) {
-                console.debug("Not recording, stopping the poll function.")
-                stopPoll();
-            }
-        }
     };
 
     const isParsableAsFloat = (value) => {
@@ -598,12 +537,6 @@ const App = () => {
                             Next
                         </button>
                     </div>
-                </div>
-                <div>
-                    <h2>Test button for testing websockets</h2>
-                    <button className="transcribe-button" onClick={() => sendMessage()}>
-                        Test send message
-                    </button>
                 </div>
             </div>
         </div>

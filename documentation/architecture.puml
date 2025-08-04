@@ -32,7 +32,6 @@ end
 U -> BR: Stop recording
 BR -> RF: Stop recording
 RF -> DS: Stop recording
-DS -> RF: Ack. stop recording
 RF -> RF: Update UI state: Verifying data
 loop
 DS -> DS: Check chunk inventory

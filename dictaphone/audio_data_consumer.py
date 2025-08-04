@@ -1,13 +1,12 @@
 import json
 import struct
+import asyncio
+
 from channels.generic.websocket import AsyncWebsocketConsumer
-import io
-import shutil
 import threading
 import datetime
 import os
 import re
-import wave
 from django.conf import settings
 
 class AudioChunkManager:
@@ -43,12 +42,29 @@ class AudioChunkManager:
 
             return self.active_recording_id
 
-    def finalize_active_recording(self):
+    def finalize_active_recording(self, total_chunks) -> bool:
         with self.lock:
             print(f"Finalizing recording, ID = {self.active_recording_id}")
-            # TODO:
-            # increment recording_id after completed recording
-            self.active_recording_id = self.active_recording_id + 1
+            recording_valid = True
+
+            # check if all chunks a saved and flushed
+            for x in range(total_chunks):
+                #print(f"checking index = {x}")
+                if x not in self.recordings[self.active_recording_id]['chunks']:
+                    print(f"Requesting resend for chunk with index = {x}")
+                    self.consumer.send_to_client({
+                        'message_type': 'request_chunk',
+                        'chunk_index': x
+                    })
+                    recording_valid = False
+
+            if recording_valid:
+                # increment recording_id after completed recording
+                self.recordings[self.active_recording_id]['status'] = 'finished'
+                self.active_recording_id = self.active_recording_id + 1
+                return True
+            else:
+                return False
 
 
     def add_chunk(self, recording_id, chunk_index, data):
@@ -59,6 +75,9 @@ class AudioChunkManager:
                 raise ValueError(f"Error adding chunk, no such recording ID: {recording_id}!")
             if not self.validate_chunk_index(chunk_index):
                 raise ValueError(f"Error adding chunk, bad chunk index: {chunk_index}!")
+            if self.recordings[recording_id]['status'] == 'finished':
+                print(f"Received chunk for finished recording - recording_id = {recording_id} chunk_index = {chunk_index}")
+                return
 
             index = int(chunk_index)
             new_chunk = {
@@ -125,6 +144,15 @@ class AudioChunkManager:
                 })
                 break
 
+    def get_file_path(self, recording_id) -> str:
+        return self.recordings[recording_id]['recording_file_path']
+
+    def get_file_size(self, recording_id) -> int:
+        return os.path.getsize(self.recordings[recording_id]['recording_file_path'])
+
+    def get_active_recording_id(self) -> int:
+        return self.active_recording_id
+
     def get_dirname(self, title) -> str:
         # Not empty and does not contain any of these: <>:"/\|?* or whitespace at ends
         if bool(title) and not re.search(r'[<>:"/\\|?*\0]', title) and title == title.strip():
@@ -150,7 +178,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        # TODO: server disconnect? how to handle?
+        # TODO: looks like this is called if the client disconnects, e.g. if the client browser window is closed
         print("disconnect")
 
     async def receive(self, text_data=None, bytes_data=None):
@@ -182,8 +210,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                         'recording_id': recording_id
                     }))
                 elif data.get("message") == "stop_recording":
-                    # TODO:
-                    pass
+                    total_chunks = data.get("parameter")
+                    print(f"Received stop_recording. Total number of chunks in recording: {total_chunks}")
+                    # Offload the finalization logic to a non-blocking background task
+                    asyncio.create_task(self._handle_finalize_recording(total_chunks))
                 else:
                     print("Unknown control message")
         elif bytes_data is not None:
@@ -197,11 +227,42 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             print(f"Byte data received - header data - Rec. ID = {recording_id} chunk_index = {chunk_index}")
             # TODO: handle ValueError (add_chunk), logging
             self.chunk_manager.add_chunk(recording_id, chunk_index, audio_data)
-            print("Chunk index before sending ack: " + str(chunk_index))
             await self.send(text_data=json.dumps({
                 'message_type': 'ack_chunk',
                 'chunk_index': chunk_index
             }))
+
+    async def _handle_finalize_recording(self, total_chunks):
+        """
+        This method runs in the background to check for recording completeness
+        without blocking the main receive loop.
+        """
+        recording_id = self.chunk_manager.get_active_recording_id()
+        recording_finalized = False
+        number_of_retries = 10
+        # try to verify file, and request resends if needed
+        # try a number of times, and send an error message if not successful
+        for i in range(number_of_retries):
+            recording_finalized = self.chunk_manager.finalize_active_recording(int(total_chunks))
+            if recording_finalized:
+                print("Recording has been finalized.")
+                break
+            else:
+                print("Recording has not been finalized, sleeping for one second.")
+                await asyncio.sleep(1)
+        if recording_finalized:
+            # send back file info (and ETA for transcription)
+            print("Recording finalized - sending file info to client.")
+            path = self.chunk_manager.get_file_path(recording_id)
+            size = self.chunk_manager.get_file_size(recording_id)
+            await self.send(text_data=json.dumps({
+                'message_type': 'recording_complete',
+                'path': path,
+                'size': size
+            }))
+        else:
+            # TODO: handle error here, send error message to client
+            pass
 
     async def send_to_client(self, json_object):
         await self.send(text_data=json.dumps(json_object))
