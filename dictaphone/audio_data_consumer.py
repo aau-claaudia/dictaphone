@@ -3,7 +3,6 @@ import struct
 import asyncio
 
 from channels.generic.websocket import AsyncWebsocketConsumer
-import threading
 import datetime
 import os
 import re
@@ -14,10 +13,10 @@ class AudioChunkManager:
         self.consumer = consumer
         self.active_recording_id = 1
         self.recordings = {}
-        self.lock = threading.Lock()  # Lock to ensure thread-safe properties
+        self.lock = asyncio.Lock() # Lock for async operations
 
-    def start_new_recording(self, title) -> int:
-        with self.lock:
+    async def start_new_recording(self, title) -> int:
+        async with self.lock:
             print(f"Starting new recording, ID = {self.active_recording_id}")
             if self.active_recording_id in self.recordings:
                 raise ValueError("Error when creating new recording, ID is already used!")
@@ -42,8 +41,8 @@ class AudioChunkManager:
 
             return self.active_recording_id
 
-    def finalize_active_recording(self, total_chunks) -> bool:
-        with self.lock:
+    async def finalize_active_recording(self, total_chunks) -> bool:
+        async with self.lock:
             print(f"Finalizing recording, ID = {self.active_recording_id}")
             recording_valid = True
 
@@ -52,7 +51,7 @@ class AudioChunkManager:
                 #print(f"checking index = {x}")
                 if x not in self.recordings[self.active_recording_id]['chunks']:
                     print(f"Requesting resend for chunk with index = {x}")
-                    self.consumer.send_to_client({
+                    await self.consumer.send_to_client({
                         'message_type': 'request_chunk',
                         'chunk_index': x
                     })
@@ -66,9 +65,14 @@ class AudioChunkManager:
             else:
                 return False
 
-
-    def add_chunk(self, recording_id, chunk_index, data):
-        with self.lock:
+    async def add_chunk(self, recording_id, chunk_index, data) -> bool:
+        """
+        :param data: binary data to save
+        :param chunk_index: the chunk index
+        :param recording_id: the recording id
+        :return: returns true if a chunk was processed and false if the chunk has already been processed
+        """
+        async with self.lock:
             print(f"Adding chunk, recording_id = {recording_id} chunk_index = {chunk_index}")
             # validate recording_id and chunk_index
             if recording_id not in self.recordings:
@@ -77,9 +81,13 @@ class AudioChunkManager:
                 raise ValueError(f"Error adding chunk, bad chunk index: {chunk_index}!")
             if self.recordings[recording_id]['status'] == 'finished':
                 print(f"Received chunk for finished recording - recording_id = {recording_id} chunk_index = {chunk_index}")
-                return
-
+                return False
             index = int(chunk_index)
+            if index in self.recordings[recording_id]['chunks']:
+                # chunk already processed
+                print(f"Chunk is already processed, chunk_index = {index}")
+                return False
+
             new_chunk = {
                 'index': index,
                 'timestamp': datetime.datetime.now(),
@@ -91,13 +99,14 @@ class AudioChunkManager:
             self.recordings[recording_id]['chunks'][index] = new_chunk
 
             # run file assembly code
-            self.assemble_audio_file()
+            await self.assemble_audio_file()
+            return True
 
     """
     Assemble as much of the file as possible.
     Work from flushed_index up to in-order chunks that are ready to be assembled
     """
-    def assemble_audio_file(self):
+    async def assemble_audio_file(self):
         if self.recordings[self.active_recording_id]['flushed_index'] is None:
             # nothing has been written
             if 0 in self.recordings[self.active_recording_id]['chunks']:
@@ -114,7 +123,7 @@ class AudioChunkManager:
             else:
                 # first chunk not received, cannot write anything, ask for re-send of first chunk
                 print("Requesting re-send of first chunk.")
-                self.consumer.send_to_client({
+                await self.consumer.send_to_client({
                     'message_type': 'request_chunk',
                     'chunk_index': 0
                 })
@@ -138,7 +147,7 @@ class AudioChunkManager:
             else:
                 # if not, request re-send and break from the while loop, we cannot write anymore chunks
                 print(f"Requesting re-send for chunk with index = {next_in_order_chunk}")
-                self.consumer.send_to_client({
+                await self.consumer.send_to_client({
                     'message_type': 'request_chunk',
                     'chunk_index': next_in_order_chunk
                 })
@@ -203,7 +212,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                 print(data.get("message"))
                 if data.get("message") == "start_recording":
                     # TODO: handle ValueError (start_new_recording), logging
-                    recording_id = self.chunk_manager.start_new_recording(data.get("parameter"))
+                    recording_id = await self.chunk_manager.start_new_recording(data.get("parameter"))
                     # send back acknowledgment with recording_id
                     await self.send(text_data=json.dumps({
                         'message_type': 'ack_start_recording',
@@ -226,11 +235,12 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             #save_audio_data_for_test(audio_data, recording_id, chunk_index, False)
             print(f"Byte data received - header data - Rec. ID = {recording_id} chunk_index = {chunk_index}")
             # TODO: handle ValueError (add_chunk), logging
-            self.chunk_manager.add_chunk(recording_id, chunk_index, audio_data)
-            await self.send(text_data=json.dumps({
-                'message_type': 'ack_chunk',
-                'chunk_index': chunk_index
-            }))
+            chunk_added = await self.chunk_manager.add_chunk(recording_id, chunk_index, audio_data)
+            if chunk_added:
+                await self.send(text_data=json.dumps({
+                    'message_type': 'ack_chunk',
+                    'chunk_index': chunk_index
+                }))
 
     async def _handle_finalize_recording(self, total_chunks):
         """
@@ -243,7 +253,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         # try to verify file, and request resends if needed
         # try a number of times, and send an error message if not successful
         for i in range(number_of_retries):
-            recording_finalized = self.chunk_manager.finalize_active_recording(int(total_chunks))
+            recording_finalized = await self.chunk_manager.finalize_active_recording(int(total_chunks))
             if recording_finalized:
                 print("Recording has been finalized.")
                 break
@@ -261,7 +271,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                 'size': size
             }))
         else:
-            # TODO: handle error here, send error message to client
+            # TODO: finalize timeout, handle error here, send error message to client
             pass
 
     async def send_to_client(self, json_object):

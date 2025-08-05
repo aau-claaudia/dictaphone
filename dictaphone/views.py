@@ -147,6 +147,7 @@ def serve_file(request, path):
         response['Content-Disposition'] = 'attachment; filename="{}"'.format(os.path.basename(file_path))
         return response
 
+# TODO: remove method and definition in urls.py
 def reset_data(request):
     # clear the transcription texts
     transcription_processor.clear_transcriptions()

@@ -21,11 +21,6 @@ const App = () => {
     const [mediaRecorder, setMediaRecorder] = useState(null);
     const [mediaStream, setMediaStream] = useState(null);
     const [analyser, setAnalyser] = useState(null);
-    const [intervalId, setIntervalId] = useState(null);
-    const intervalIdRef = useRef(intervalId);
-    const [requestIds, setRequestIds] = useState([]); // Store request Ids
-    const requestIdsRef = useRef(requestIds);
-    const [transcriptions, setTranscriptions] = useState([]); // Store transcriptions
     const [showSettings, setShowSettings] = useState(false);
     const [sections, setSections] = useState([
         { title: "Recording Section 1", isRecording: false, audioLevel: 0, duration: 0, animationFrameId: null, titleLocked: false, audioUrl: null, audioPath: null },
@@ -35,6 +30,7 @@ const App = () => {
     const socketRef = useRef(null);
     const [initiateRecordingFlag, setInitiateRecordingFlag] = useState(false);
     const [recordingId, setRecordingId] = useState(null);
+    const chunkInventoryRef = useRef(new Map());
 
     // TODO: state management, read state from session and server where appropriately
 
@@ -83,20 +79,32 @@ const App = () => {
                             await startRecording(currentSection, updatedRecordingId);
                         } else {
                             console.debug("No recording id returned.");
+                            // TODO: handle error
                         }
                         break;
                     case "ack_chunk":
                         // handle chunk acknowledgment
-                        // TODO:
                         console.debug("Chunk acknowledgment received.")
                         if (data.chunk_index != null) {
-                            console.debug("Ack. chunk index: " + data.chunk_index);
+                            const acknowledgedChunkIndex = parseInt(data.chunk_index, 10);
+                            if (isNaN(acknowledgedChunkIndex)) {
+                                console.warn("Received an invalid chunk index from server:", data.chunk_index);
+                                break;
+                            }
+                            if (chunkInventoryRef.current.has(acknowledgedChunkIndex)) {
+                                chunkInventoryRef.current.delete(acknowledgedChunkIndex);
+                                console.debug(`Chunk ${data.chunk_index} acknowledged by server and removed from inventory.`);
+                            } else {
+                                console.warn(`Received acknowledgement for unknown chunk index: ${acknowledgedChunkIndex}.`);
+                            }
+                        } else {
+                            console.warn("Warning, no chunk index data in acknowledgment.");
                         }
                         break;
                     case "recording_complete":
                         // recording is verified to be complete from server (no missing chunks)
                         // get the file size and ETA, update state to allow new recording
-                        // TODO: list of recordingIds? activeRecordingId?
+                        // TODO: maintain list of recordingIds, file path, size, and transcription. Map(recordingId -> {object})
                         console.debug("Recording complete received from server.")
                         if (data.path != null && data.size != null) {
                             console.debug("File path: " + data.path);
@@ -104,10 +112,28 @@ const App = () => {
                         }
                         setRecordingId(null);
                         setFinalizing(false);
+                        // reset the chunk inventory Map
+                        chunkInventoryRef.current.clear();
                         break;
                     case "request_chunk":
                         // handle data request for missing chunk
-                        // TODO:
+                        console.debug("Chunk request received from server for chunk: ", data.chunk_index);
+                        if (data.chunk_index != null) {
+                            const acknowledgedChunkIndex = parseInt(data.chunk_index, 10);
+                            if (isNaN(acknowledgedChunkIndex)) {
+                                console.warn("Received an invalid chunk index in chunk request from server: ", data.chunk_index);
+                                break;
+                            }
+                            if (chunkInventoryRef.current.has(acknowledgedChunkIndex)) {
+                                // re-send chunk to server
+                                console.debug(`Re-sending chunk with index: ${acknowledgedChunkIndex} to server.`);
+                                sendBinaryData(chunkInventoryRef.current.get(acknowledgedChunkIndex));
+                            } else {
+                                console.warn(`Received chunk request for unknown chunk index: ${acknowledgedChunkIndex}.`);
+                            }
+                        } else {
+                            console.warn("Warning, no chunk index data in chunk request.");
+                        }
                         break;
                     case "transcribed_file":
                         // handle transcribed file links
@@ -129,7 +155,8 @@ const App = () => {
 
     const sendControlMessage = (message, parameter) => {
         const ws = socketRef.current;
-        console.debug("Sending control message, socket state:", ws);
+        console.debug("Sending control message.");
+        //console.debug("Socket state:", ws);
         if (parameter) {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({
@@ -154,7 +181,8 @@ const App = () => {
 
     const sendBinaryData = (data) => {
         const ws = socketRef.current;
-        console.debug("Sending binary data, socket state:", ws);
+        console.debug("Sending binary data.");
+        //console.debug("Socket state:", ws);
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(data);
         } else {
@@ -250,8 +278,9 @@ const App = () => {
         mediaRecorderInstance.ondataavailable = (event) => {
             if (event.data.size > 0) {
                 console.debug("Sending binary data to backend.")
+                const currentChunkIndex = chunkIndexRef.current;
                 // 1. Create header
-                const header = createChunkHeader(updatedRecordingId, chunkIndexRef.current);
+                const header = createChunkHeader(updatedRecordingId, currentChunkIndex);
                 // 2. Read audio chunk as ArrayBuffer and concatenate
                 event.data.arrayBuffer().then(dataBuffer => {
                     // 3. Concatenate header and data
@@ -259,6 +288,9 @@ const App = () => {
                     const combined = new Uint8Array(totalLength);
                     combined.set(new Uint8Array(header), 0);
                     combined.set(new Uint8Array(dataBuffer), header.byteLength);
+                    // Store the chunk in chunk inventory map before sending.
+                    chunkInventoryRef.current.set(currentChunkIndex, combined.buffer);
+                    console.debug(`Stored chunk ${currentChunkIndex} for potential resend.`);
                     // 4. Send through WebSocket
                     sendBinaryData(combined.buffer);
                 });
@@ -331,45 +363,12 @@ const App = () => {
         return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
     };
 
-    // Keep the ref updated with the latest requestIds object
-    useEffect(() => {
-        requestIdsRef.current = requestIds;
-    }, [requestIds]);
     useEffect(() => {
         recordingRef.current = recording;
     }, [recording]);
-    useEffect(() => {
-        intervalIdRef.current = intervalId;
-    }, [intervalId]);
 
     //TODO: load relevant state from session / backend server
 
-    const stopPoll = () => {
-        if (intervalIdRef.current && Number.isInteger(intervalIdRef.current)) {
-            console.debug("Stopping the poll function.")
-            clearInterval(intervalIdRef.current);
-        } else {
-            console.log("The interval id is not defined.");
-        }
-    }
-    useEffect(() => {
-        console.log("use effect triggered...")
-        console.log(requestIds)
-        // if there are no requestId's to poll and we are not recording then unschedule the poll function
-        if (requestIds.length === 0 && !recordingRef.current ) {
-            stopPoll();
-        }
-    }, [requestIds, intervalId]);
-
-    const removeRequestId = (requestIdToRemove) => {
-        // Convert requestIdToRemove to an integer
-        const idToRemove = parseInt(requestIdToRemove, 10);
-        setRequestIds((prevRequestIds) => {
-            const updatedRequestIds = prevRequestIds.filter(reqId => reqId !== idToRemove);
-            console.debug("Request ids after remove: " + updatedRequestIds);
-            return updatedRequestIds;
-        });
-    };
 
     const isParsableAsFloat = (value) => {
         return !isNaN(parseFloat(value)) && isFinite(value);
@@ -378,21 +377,6 @@ const App = () => {
     // TODO: make hallucination threshold configurable through settings?
     const isBelowConfidenceThreshold = (confidence) => {
         return (isParsableAsFloat(confidence) && (parseFloat(confidence) < 0.55));
-    }
-
-    const resetServerData = async () => {
-        console.debug("Resetting server data.")
-        setTranscriptions([]);
-        fetch(`http://localhost:8000/reset-data/`, {
-            method: "GET",
-            credentials: "include",
-            headers: {
-                "X-CSRFToken": csrfToken,
-            },
-        })
-            .catch(error => {
-                console.error('Error resetting server data:', error);
-            });
     }
 
     // Function for showing or hiding the settings
@@ -445,9 +429,6 @@ const App = () => {
             <h1>Dictaphone prototype</h1>
             <button className="transcribe-button" onClick={showOrHideSettings}>
                 {showSettings ? 'Hide settings' : 'Show settings'}
-            </button>
-            <button className="transcribe-button" onClick={resetServerData}>
-                Reset server data
             </button>
             {
                 showSettings && (
