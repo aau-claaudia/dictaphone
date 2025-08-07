@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 import asyncio
 import functools
+import inspect
 
 def async_test(coro):
     """A decorator to run async test methods with the standard unittest runner."""
@@ -50,6 +51,7 @@ class TestAudioChunkManager(unittest.TestCase):
 
     @async_test
     async def test_in_order(self):
+        print("Running test: test_in_order()")
         # 1) All chunks in order
         for idx in range(5):
             data = self.load_chunk(idx)
@@ -58,6 +60,7 @@ class TestAudioChunkManager(unittest.TestCase):
 
     @async_test
     async def test_out_of_order(self):
+        print("Running test: test_out_of_order()")
         # 2) Chunks out of order
         order = [0, 2, 1, 4, 3]
         for idx in order:
@@ -69,6 +72,7 @@ class TestAudioChunkManager(unittest.TestCase):
 
     @async_test
     async def test_missing_and_resend(self):
+        print("Running test: test_missing_and_resend()")
         # 3) Leave out chunk 2, then resend it
         for idx in [0, 1, 3, 4]:
             data = self.load_chunk(idx)
@@ -82,6 +86,7 @@ class TestAudioChunkManager(unittest.TestCase):
 
     @async_test
     async def test_first_chunk_missing(self):
+        print("Running test: test_first_chunk_missing()")
         # 4) Start with chunk 1, then supply chunk 0 after request
         for idx in [1, 2, 3, 4]:
             data = self.load_chunk(idx)
@@ -92,6 +97,16 @@ class TestAudioChunkManager(unittest.TestCase):
         data = self.load_chunk(0)
         await self.manager.add_chunk(self.recording_id, 0, data)
         self.compare_output_to_reference()
+
+    @async_test
+    async def test_handle_chunk_delivered_twice(self):
+        print("Running test: test_handle_chunk_delivered_twice()")
+        # 5) Deliver chunk 0 and chunk 4 twice
+        for idx in [0, 0, 1, 2, 3, 4, 4]:
+            data = self.load_chunk(idx)
+            await self.manager.add_chunk(self.recording_id, idx, data)
+        self.compare_output_to_reference()
+
 
 if __name__ == "__main__":
     unittest.main()
