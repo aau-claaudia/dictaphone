@@ -7,6 +7,9 @@ import datetime
 import os
 import re
 from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 class AudioChunkManager:
     def __init__(self, consumer):
@@ -17,7 +20,7 @@ class AudioChunkManager:
 
     async def start_new_recording(self, title) -> int:
         async with self.lock:
-            print(f"Starting new recording, ID = {self.active_recording_id}")
+            logger.info(f"Starting new recording, ID = {self.active_recording_id}")
             if self.active_recording_id in self.recordings:
                 raise ValueError("Error when creating new recording, ID is already used!")
 
@@ -43,14 +46,14 @@ class AudioChunkManager:
 
     async def finalize_active_recording(self, total_chunks) -> bool:
         async with self.lock:
-            print(f"Finalizing recording, ID = {self.active_recording_id}")
+            logger.info(f"Finalizing recording, ID = {self.active_recording_id}")
             recording_valid = True
 
             # check if all chunks a saved and flushed
             for x in range(total_chunks):
-                #print(f"checking index = {x}")
+                #logger.info(f"checking index = {x}")
                 if x not in self.recordings[self.active_recording_id]['chunks']:
-                    print(f"Requesting resend for chunk with index = {x}")
+                    logger.info(f"Requesting resend for chunk with index = {x}")
                     await self.consumer.send_to_client({
                         'message_type': 'request_chunk',
                         'chunk_index': x
@@ -73,19 +76,19 @@ class AudioChunkManager:
         :return: returns true if a chunk was processed and false if the chunk has already been processed
         """
         async with self.lock:
-            print(f"Adding chunk, recording_id = {recording_id} chunk_index = {chunk_index}")
+            logger.info(f"Adding chunk, recording_id = {recording_id} chunk_index = {chunk_index}")
             # validate recording_id and chunk_index
             if recording_id not in self.recordings:
                 raise ValueError(f"Error adding chunk, no such recording ID: {recording_id}!")
             if not self.validate_chunk_index(chunk_index):
                 raise ValueError(f"Error adding chunk, bad chunk index: {chunk_index}!")
             if self.recordings[recording_id]['status'] == 'finished':
-                print(f"Received chunk for finished recording - recording_id = {recording_id} chunk_index = {chunk_index}")
+                logger.info(f"Received chunk for finished recording - recording_id = {recording_id} chunk_index = {chunk_index}")
                 return False
             index = int(chunk_index)
             if index in self.recordings[recording_id]['chunks']:
                 # chunk already processed
-                print(f"Chunk is already processed, chunk_index = {index}")
+                logger.info(f"Chunk is already processed, chunk_index = {index}")
                 return False
 
             new_chunk = {
@@ -111,7 +114,7 @@ class AudioChunkManager:
             # nothing has been written
             if 0 in self.recordings[self.active_recording_id]['chunks']:
                 # we have received the first chunk
-                print("Writing the first chunk.")
+                logger.info("Writing the first chunk.")
                 # save data to file
                 with open(self.recordings[self.active_recording_id]['recording_file_path'], "wb") as f:
                     f.write(self.recordings[self.active_recording_id]['chunks'][0]['data'])
@@ -122,7 +125,7 @@ class AudioChunkManager:
                 self.recordings[self.active_recording_id]['flushed_index'] = 0
             else:
                 # first chunk not received, cannot write anything, ask for re-send of first chunk
-                print("Requesting re-send of first chunk.")
+                logger.info("Requesting re-send of first chunk.")
                 await self.consumer.send_to_client({
                     'message_type': 'request_chunk',
                     'chunk_index': 0
@@ -132,7 +135,7 @@ class AudioChunkManager:
             next_in_order_chunk = self.recordings[self.active_recording_id]['flushed_index'] + 1
             # check if the next in-order chunk is available
             if next_in_order_chunk in self.recordings[self.active_recording_id]['chunks']:
-                print(f"Writing chunk with index = {next_in_order_chunk}")
+                logger.info(f"Writing chunk with index = {next_in_order_chunk}")
                 data_to_write = self.recordings[self.active_recording_id]['chunks'][next_in_order_chunk]['data']
 
                 # write the audio data to file
@@ -146,7 +149,7 @@ class AudioChunkManager:
                 self.recordings[self.active_recording_id]['flushed_index'] = next_in_order_chunk
             else:
                 # if not, request re-send and break from the while loop, we cannot write anymore chunks
-                print(f"Requesting re-send for chunk with index = {next_in_order_chunk}")
+                logger.info(f"Requesting re-send for chunk with index = {next_in_order_chunk}")
                 await self.consumer.send_to_client({
                     'message_type': 'request_chunk',
                     'chunk_index': next_in_order_chunk
@@ -188,7 +191,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         # TODO: looks like this is called if the client disconnects, e.g. if the client browser window is closed
-        print("disconnect")
+        logger.info("disconnect")
 
     async def receive(self, text_data=None, bytes_data=None):
         """
@@ -208,8 +211,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         if text_data is not None:
             data = json.loads(text_data)
             if data.get("type") == "control_message":
-                print("Control message received.")
-                print(data.get("message"))
+                logger.info("Control message received.")
+                logger.info(data.get("message"))
                 if data.get("message") == "start_recording":
                     # TODO: handle ValueError (start_new_recording), logging
                     recording_id = await self.chunk_manager.start_new_recording(data.get("parameter"))
@@ -220,11 +223,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     }))
                 elif data.get("message") == "stop_recording":
                     total_chunks = data.get("parameter")
-                    print(f"Received stop_recording. Total number of chunks in recording: {total_chunks}")
+                    logger.info(f"Received stop_recording. Total number of chunks in recording: {total_chunks}")
                     # Offload the finalization logic to a non-blocking background task
                     asyncio.create_task(self._handle_finalize_recording(total_chunks))
                 else:
-                    print("Unknown control message")
+                    logger.info("Unknown control message")
         elif bytes_data is not None:
             # handle binary audio chunks
             # bytes_data contains the full binary message received, the first 8 bytes contains the header
@@ -233,7 +236,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             audio_data = bytes_data[8:]  # contains the audio chunk
             #save_audio_data_for_test(bytes_data, recording_id, chunk_index, True)
             #save_audio_data_for_test(audio_data, recording_id, chunk_index, False)
-            print(f"Byte data received - header data - Rec. ID = {recording_id} chunk_index = {chunk_index}")
+            logger.info(f"Byte data received - header data - Rec. ID = {recording_id} chunk_index = {chunk_index}")
             # TODO: handle ValueError (add_chunk), logging
             chunk_added = await self.chunk_manager.add_chunk(recording_id, chunk_index, audio_data)
             if chunk_added:
@@ -255,14 +258,14 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         for i in range(number_of_retries):
             recording_finalized = await self.chunk_manager.finalize_active_recording(int(total_chunks))
             if recording_finalized:
-                print("Recording has been finalized.")
+                logger.info("Recording has been finalized.")
                 break
             else:
-                print("Recording has not been finalized, sleeping for one second.")
+                logger.info("Recording has not been finalized, sleeping for one second.")
                 await asyncio.sleep(1)
         if recording_finalized:
             # send back file info (and ETA for transcription)
-            print("Recording finalized - sending file info to client.")
+            logger.info("Recording finalized - sending file info to client.")
             path = self.chunk_manager.get_file_path(recording_id)
             size = self.chunk_manager.get_file_size(recording_id)
             await self.send(text_data=json.dumps({
@@ -293,4 +296,4 @@ def save_audio_data_for_test(audio_data, recording_id, chunk_index, includes_hea
     filepath = os.path.join(directory, filename)
     with open(filepath, "wb") as f:
         f.write(audio_data)
-    print(f"Saved chunk to {filepath}")
+    logger.info(f"Saved chunk to {filepath}")

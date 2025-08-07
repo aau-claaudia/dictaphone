@@ -11,7 +11,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
-from dictaphone.transcription_processor import TranscriptionProcessor
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -155,9 +154,6 @@ CORS_ALLOW_CREDENTIALS = True
 # use the header to determine if the request is through HTTPS
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Initialize the transcription processor (load whisper model)
-transcription_processor = TranscriptionProcessor(model_name="turbo")
-
 # Add Celery configuration
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
@@ -167,5 +163,43 @@ CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    },
+}
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            # Example: INFO 2023-10-27 10:30:00 consumers Control message received: start_recording
+            "format": "{levelname} {asctime} {module} {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "verbose",
+        },
+    },
+    "loggers": {
+        # This is the key part: it catches logs from YOUR app code.
+        "root": {
+            "handlers": ["console"],
+            # Use DEBUG to see everything during development.
+            "level": "INFO",
+        },
+        # This logger handles messages from Django's request/response cycle.
+        "django.server": {
+            "handlers": ["console"],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        # This logger handles messages from Daphne.
+        "daphne.server": {
+            "handlers": ["console"],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
 }

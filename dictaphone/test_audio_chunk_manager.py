@@ -3,7 +3,6 @@ import unittest
 from pathlib import Path
 import asyncio
 import functools
-import inspect
 
 def async_test(coro):
     """A decorator to run async test methods with the standard unittest runner."""
@@ -27,7 +26,7 @@ class TestAudioChunkManager(unittest.TestCase):
         self.reference_file = current_path / "resources/test_chunks/recording.wav"
         self.output_file = current_path / "resources/test_chunks/output.wav"
         self.consumer = DummyConsumer()
-        from audio_data_consumer import AudioChunkManager
+        from dictaphone.audio_data_consumer import AudioChunkManager
         self.manager = AudioChunkManager(self.consumer)
         self.recording_id = 1
         self.manager.recordings[self.recording_id] = {

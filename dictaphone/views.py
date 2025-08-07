@@ -6,15 +6,17 @@ from django.http import JsonResponse, HttpResponse, Http404
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
-from backend.settings import transcription_processor
 from .serializers import FileUploadSerializer, MultipleRequestIdJsonSerializer, RequestIdJsonSerializer, SilenceThresholdSerializer, RecordingFilePathSerializer
 from django.http import HttpResponse
 from django.http.response import JsonResponse
 from django.conf import settings
+import logging
 
+logger = logging.getLogger(__name__)
 
 def index(request):
     # TODO: serve react application on /
+    #logger.info("Executing default view.")
     return HttpResponse("Welcome to the Dictaphone app!")
 
 class FileUploadView(APIView):
@@ -52,7 +54,7 @@ class SilenceThresholdView(APIView):
             if silence_threshold_serializer.is_valid():
                 threshold = silence_threshold_serializer.validated_data['silence_threshold']
                 #print(threshold)
-                transcription_processor.set_silence_threshold(threshold)
+                #transcription_processor.set_silence_threshold(threshold)
                 return JsonResponse({"message": "Silence threshold successfully configured!", "silence_threshold": threshold}, status=200)
             else:
                 return Response(silence_threshold_serializer.errors, status=400)
@@ -97,21 +99,21 @@ class GetTranscriptionsView(APIView):
                 requests_meta_data = serializer.validated_data['requests']
                 for request_id in requests_meta_data:
                     print(f"Serialized request_id: {request_id}")
-                    transcription_result = transcription_processor.get_transcription(request_id.get('request_id'))
-                    if transcription_result is not None:
-                        responses.append({
-                            'request_id': request_id.get('request_id'),
-                            'transcription_text': transcription_result['text'],
-                            'transcription_confidence': transcription_result['confidence'],
-                            'transcription_file_name': transcription_result['file_name']
-                        })
-                    else:
-                        responses.append({
-                            'request_id': request_id.get('request_id'),
-                            'transcription_text': None,
-                            'transcription_confidence': None,
-                            'transcription_file_name': None
-                        })
+                    #transcription_result = transcription_processor.get_transcription(request_id.get('request_id'))
+                    #if transcription_result is not None:
+                    #    responses.append({
+                    #        'request_id': request_id.get('request_id'),
+                    #        'transcription_text': transcription_result['text'],
+                    #        'transcription_confidence': transcription_result['confidence'],
+                    #        'transcription_file_name': transcription_result['file_name']
+                    #    })
+                    #else:
+                    #    responses.append({
+                    #        'request_id': request_id.get('request_id'),
+                    #        'transcription_text': None,
+                    #        'transcription_confidence': None,
+                    #        'transcription_file_name': None
+                    #    })
                     response['transcriptions'] = responses
                 return JsonResponse(response)
             return Response(serializer.errors, status=400)
@@ -119,14 +121,14 @@ class GetTranscriptionsView(APIView):
 
 
 def serve_file(request, path):
-    #print("Serve file view")
+    #logger.info("Executing the serve_file view")
     # Determine the base directory based on the URL prefix
     # TODO: redo serve file path logic
     if request.path.startswith('/work/'):
         base_dir = '/work'  # the files are saved here on UCloud
     elif 'media/TRANSCRIPTIONS' in request.path:
         base_dir = os.path.join(settings.MEDIA_ROOT, 'TRANSCRIPTIONS/')
-    elif 'UPLOADS/INPUT' in request.path:
+    elif 'media/RECORDINGS' in request.path:
         # Open the file and create the response
         with open(request.path, 'rb') as f:
             response = HttpResponse(f.read(), content_type='application/octet-stream')
@@ -150,7 +152,7 @@ def serve_file(request, path):
 # TODO: remove method and definition in urls.py
 def reset_data(request):
     # clear the transcription texts
-    transcription_processor.clear_transcriptions()
+    #transcription_processor.clear_transcriptions()
     # delete the audio files
     directory_path: str = os.path.join(settings.MEDIA_ROOT, 'UPLOADS/INPUT')
     clean_dir(directory_path)

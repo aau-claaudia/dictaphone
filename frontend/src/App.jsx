@@ -23,7 +23,15 @@ const App = () => {
     const [analyser, setAnalyser] = useState(null);
     const [showSettings, setShowSettings] = useState(false);
     const [sections, setSections] = useState([
-        { title: "Recording Section 1", isRecording: false, audioLevel: 0, duration: 0, animationFrameId: null, titleLocked: false, audioUrl: null, audioPath: null },
+        {
+            title: "Recording Section 1",
+            isRecording: false, audioLevel: 0,
+            duration: 0,
+            animationFrameId: null,
+            titleLocked: false,
+            audioUrl: null,
+            audioPath: null
+        },
     ]);
     const [currentSection, setCurrentSection] = useState(0);
     const [socket, setSocket] = useState(null);
@@ -105,11 +113,18 @@ const App = () => {
                         // recording is verified to be complete from server (no missing chunks)
                         // get the file size and ETA, update state to allow new recording
                         // TODO: maintain list of recordingIds, file path, size, and transcription. Map(recordingId -> {object})
+                        // TODO: need to connect section id with recording id to make sure I update the right recording and transcription files
                         console.debug("Recording complete received from server.")
                         if (data.path != null && data.size != null) {
                             console.debug("File path: " + data.path);
                             console.debug("File size: " + data.size);
                         }
+                        // TODO: send back recording ID with recording_complete message and make sure to update appropriate section with audio path
+                        // TODO: use relative link and fix react development server proxy to use localhost:8001
+                        const updatedSections = [...sections];
+                        updatedSections[currentSection].audioUrl = "http://localhost:8001" + data.path;
+                        setSections(updatedSections);
+
                         setRecordingId(null);
                         setFinalizing(false);
                         // reset the chunk inventory Map
@@ -222,6 +237,7 @@ const App = () => {
                     isRecording: false,
                     audioLevel: 0,
                     duration: 0,
+                    animationFrameId: null,
                     titleLocked: false,
                     audioUrl: null,
                     audioPath: null
