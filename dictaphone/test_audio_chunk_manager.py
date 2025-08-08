@@ -27,11 +27,11 @@ class TestAudioChunkManager(unittest.TestCase):
         self.output_file = current_path / "resources/test_chunks/output.wav"
         self.consumer = DummyConsumer()
         from dictaphone.audio_data_consumer import AudioChunkManager
-        self.manager = AudioChunkManager(self.consumer)
+        self.manager = AudioChunkManager(self.consumer, load_data_from_server=False)
         self.recording_id = 1
+        self.manager.set_active_recording_id(self.recording_id)
         self.manager.recordings[self.recording_id] = {
             'id': self.recording_id,
-            'created': None,
             'title': "test",
             'status': 'active',
             'flushed_index': None,

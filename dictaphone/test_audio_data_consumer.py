@@ -5,6 +5,7 @@ from channels.testing import WebsocketCommunicator
 
 
 from backend.asgi import application
+from dictaphone.audio_data_consumer import AudioChunkManager
 
 # --- Test Configuration ---
 # Integration test that tests the overall functionality of the AudioDataConsumer including correct handling of headers
@@ -32,7 +33,7 @@ def audio_chunks():
     return chunks
 
 @pytest.mark.asyncio
-async def test_audio_upload_and_finalize(audio_chunks):
+async def test_audio_upload_and_finalize(audio_chunks, monkeypatch):
     """
     Tests the full lifecycle of an audio recording upload via WebSocket:
     1. Connect and start a new recording.
@@ -41,6 +42,18 @@ async def test_audio_upload_and_finalize(audio_chunks):
     4. Receive the final confirmation that the recording is complete.
     5. Disconnect.
     """
+    # To ensure the test runs in a clean, isolated environment, we patch the
+    # AudioChunkManager's initializer. This uses the `load_data_from_server`
+    # flag you added to prevent the test from loading pre-existing recording
+    # data from the server, which could interfere with test assertions.
+    original_init = AudioChunkManager.__init__
+
+    def mock_init(self, consumer, load_data_from_server=True):
+        # Force load_data_from_server to be False for all test instantiations.
+        original_init(self, consumer, load_data_from_server=False)
+
+    monkeypatch.setattr(AudioChunkManager, "__init__", mock_init)
+
     communicator = WebsocketCommunicator(application, "/ws/dictaphone/data/")
     connected, _ = await communicator.connect()
     assert connected, "Failed to connect to the WebSocket."

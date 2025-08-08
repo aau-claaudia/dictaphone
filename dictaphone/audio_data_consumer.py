@@ -8,18 +8,42 @@ import os
 import re
 from django.conf import settings
 import logging
+from enum import Enum
 
 logger = logging.getLogger(__name__)
 
 class AudioChunkManager:
-    def __init__(self, consumer):
+    def __init__(self, consumer, load_data_from_server=True):
         self.consumer = consumer
-        self.active_recording_id = 1
+        self.active_recording_id = 0 # first recording will have ID = 1
         self.recordings = {}
         self.lock = asyncio.Lock() # Lock for async operations
+        if load_data_from_server:
+            recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
+            os.makedirs(recording_path, exist_ok=True)
+            self.initialize_recording_data(load_all_recordings_status(recording_path))
+
+    def initialize_recording_data(self, data: list[dict]):
+        if len(data) < 1:
+            logger.info("No previous recording data found on server.")
+            return
+        logger.info("Loading previous recording data from server.")
+        max_recording_id = 0
+        for recording in data:
+            recording_id = recording['recording_id']
+            self.recordings[recording_id] = {
+                'id': recording_id,
+                'title': recording['title'],
+                'status': recording['status'],
+                'recording_file_path': recording['path']
+            }
+            if recording_id > max_recording_id:
+                max_recording_id = recording_id
+        self.active_recording_id = max_recording_id
 
     async def start_new_recording(self, title) -> int:
         async with self.lock:
+            self.active_recording_id = self.active_recording_id + 1
             logger.info(f"Starting new recording, ID = {self.active_recording_id}")
             if self.active_recording_id in self.recordings:
                 raise ValueError("Error when creating new recording, ID is already used!")
@@ -27,7 +51,6 @@ class AudioChunkManager:
             # setup metadata structure for the recording
             self.recordings[self.active_recording_id] = {
                 'id': self.active_recording_id,
-                'created': datetime.datetime.now(),
                 'title': title,
                 'status': 'active',
                 'flushed_index': None, # how much of the file has been assembled
@@ -44,26 +67,34 @@ class AudioChunkManager:
 
             return self.active_recording_id
 
-    async def finalize_active_recording(self, total_chunks) -> bool:
+    async def finalize_active_recording(self, total_chunks=None) -> bool:
+        number_of_chunks = total_chunks
+        ask_for_resend = True
+        if number_of_chunks is None:
+            # finalizing interrupted (disconnected) recording, number of chunks is what we have
+            number_of_chunks = len(self.recordings[self.active_recording_id]['chunks'])
+            # don't ask for resend since the connection is lost
+            ask_for_resend = False
+
         async with self.lock:
             logger.info(f"Finalizing recording, ID = {self.active_recording_id}")
             recording_valid = True
 
             # check if all chunks a saved and flushed
-            for x in range(total_chunks):
+            for x in range(number_of_chunks):
                 #logger.info(f"checking index = {x}")
                 if x not in self.recordings[self.active_recording_id]['chunks']:
-                    logger.info(f"Requesting resend for chunk with index = {x}")
-                    await self.consumer.send_to_client({
-                        'message_type': 'request_chunk',
-                        'chunk_index': x
-                    })
+                    if ask_for_resend:
+                        logger.info(f"Requesting resend for chunk with index = {x}")
+                        await self.consumer.send_to_client({
+                            'message_type': 'request_chunk',
+                            'chunk_index': x
+                        })
                     recording_valid = False
 
             if recording_valid:
                 # increment recording_id after completed recording
                 self.recordings[self.active_recording_id]['status'] = 'finished'
-                self.active_recording_id = self.active_recording_id + 1
                 return True
             else:
                 return False
@@ -82,7 +113,7 @@ class AudioChunkManager:
                 raise ValueError(f"Error adding chunk, no such recording ID: {recording_id}!")
             if not self.validate_chunk_index(chunk_index):
                 raise ValueError(f"Error adding chunk, bad chunk index: {chunk_index}!")
-            if self.recordings[recording_id]['status'] == 'finished':
+            if self.recordings[recording_id]['status'] != 'active':
                 logger.info(f"Received chunk for finished recording - recording_id = {recording_id} chunk_index = {chunk_index}")
                 return False
             index = int(chunk_index)
@@ -165,6 +196,9 @@ class AudioChunkManager:
     def get_active_recording_id(self) -> int:
         return self.active_recording_id
 
+    def is_active_recording(self, recording_id) -> bool:
+        return recording_id in self.recordings and self.recordings[recording_id]['status'] == 'active'
+
     def get_dirname(self, title) -> str:
         # Not empty and does not contain any of these: <>:"/\|?* or whitespace at ends
         if bool(title) and not re.search(r'[<>:"/\\|?*\0]', title) and title == title.strip():
@@ -172,12 +206,74 @@ class AudioChunkManager:
         else:
             return str(self.active_recording_id)
 
+    def set_active_recording_id(self, recording_id: int):
+        # method used for setting up tests
+        self.active_recording_id = recording_id
+
     def validate_chunk_index(self, index):
         try:
             value = int(index)
             return value >= 0
         except (ValueError, TypeError):
             return False
+
+
+class RecordingStatus(Enum):
+    """Represents the finalization status of a recording."""
+    VERIFIED = 1              # Normal completion
+    INTERRUPTED_VERIFIED = 2  # For when a recording is stopped but all data is received
+    DATA_LOSS = 3             # For when finalization fails due to missing data, e.g. a chunk is missing
+
+
+def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
+    """
+    Scans the base recordings directory to find all recordings and their
+    finalization status from 'completion_log.txt' files.
+    Args:
+        base_recordings_path: The root directory where all recording subdirectories are stored
+    Returns:
+        A list of dictionaries, where each dictionary contains:
+        - 'recording_id': The recording id
+        - 'path': The full path to the 'recording.wav' file.
+        - 'status': The RecordingStatus enum member (e.g., RecordingStatus.VERIFIED).
+    """
+    logger.info(f"Scanning for recordings in: {base_recordings_path}")
+    all_statuses = []
+
+    try:
+        # Iterate through all items in the base path to find directories
+        for item_name in os.listdir(base_recordings_path):
+            recording_dir = os.path.join(base_recordings_path, item_name)
+            if not os.path.isdir(recording_dir):
+                continue
+
+            # Extract the title from the directory name (e.g., "1_My_Title" -> "My_Title")
+            parts = item_name.split('_', 1)
+            title = parts[1] if len(parts) > 1 else item_name
+            log_path = os.path.join(recording_dir, "completion_log.txt")
+            wav_path = os.path.join(recording_dir, "recording.wav")
+
+            # We only care about directories that have both a log and a wav file
+            if os.path.isfile(log_path) and os.path.isfile(wav_path):
+                try:
+                    with open(log_path, "r") as f:
+                        lines = f.readlines()
+                        if len(lines) < 2:
+                            logger.warning(f"Malformed completion log (too short): {log_path}")
+                            continue
+
+                        recording_id = int(lines[0].strip())
+                        status_name = lines[1].strip()
+                        status = RecordingStatus[status_name] # Convert string back to enum
+                        all_statuses.append({"recording_id": recording_id,
+                                             "path": wav_path,
+                                             "status": status,
+                                             "title": title})
+                except (KeyError, IndexError) as e:
+                    logger.error(f"Could not parse completion log {log_path}: {e}")
+    except FileNotFoundError:
+        logger.error(f"Recordings directory not found: {base_recordings_path}")
+    return all_statuses
 
 
 class AudioDataConsumer(AsyncWebsocketConsumer):
@@ -190,8 +286,16 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         await self.accept()
 
     async def disconnect(self, close_code):
-        # TODO: looks like this is called if the client disconnects, e.g. if the client browser window is closed
-        logger.info("disconnect")
+        # this is called if the client disconnects, e.g. if the client browser window is closed or refreshed
+        # TODO: make integration test to cover this
+        logger.info("Client disconnected.")
+        if self.chunk_manager.is_active_recording(self.chunk_manager.get_active_recording_id()):
+            # try to finalize interrupted recording
+            logger.info(f"Disconnect - try to finalize active recording, id: {self.chunk_manager.get_active_recording_id().__str__()}")
+            asyncio.create_task(self._handle_finalize_recording())
+        else:
+            logger.info("Disconnect - no active recording to finalize.")
+        #  recording state will be RecordingStatus.INTERRUPTED_VERIFIED or RecordingStatus.DATA_LOSS
 
     async def receive(self, text_data=None, bytes_data=None):
         """
@@ -245,7 +349,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     'chunk_index': chunk_index
                 }))
 
-    async def _handle_finalize_recording(self, total_chunks):
+    async def _handle_finalize_recording(self, total_chunks=None):
         """
         This method runs in the background to check for recording completeness
         without blocking the main receive loop.
@@ -253,10 +357,47 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         recording_id = self.chunk_manager.get_active_recording_id()
         recording_finalized = False
         number_of_retries = 10
+        success_status: RecordingStatus = RecordingStatus.VERIFIED
+        send_info_to_client = True
+
+        if total_chunks is None:
+            # if we are verifying an interrupted recording (client disconnect)
+            # don't expect additional chunks
+            # don't send info to client and modify success flag
+            number_of_retries = 1
+            send_info_to_client = False
+            success_status = RecordingStatus.INTERRUPTED_VERIFIED
+
+        # method for writing completion log file
+        def write_completion_log(status: RecordingStatus):
+            """Writes a completion log file for the recording."""
+            try:
+                # We get the full .wav file path to derive the recording's directory.
+                wav_path = self.chunk_manager.get_file_path(recording_id)
+                if not wav_path:
+                    logger.error(f"Cannot write completion log for recording {recording_id}: path is unknown.")
+                    return
+
+                recording_dir = os.path.dirname(wav_path)
+                log_path = os.path.join(recording_dir, "completion_log.txt")
+                timestamp_finalized = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+                os.makedirs(recording_dir, exist_ok=True)
+                with open(log_path, "w") as f:
+                    f.write(f"{recording_id}\n")
+                    f.write(f"{status.name}\n")
+                    f.write(f"{timestamp_finalized}\n")
+                logger.info(f"Wrote completion log for recording {recording_id} with status {status.name}")
+            except Exception as e:
+                logger.error(f"Failed to write completion log for recording {recording_id}: {e}")
+
         # try to verify file, and request resends if needed
         # try a number of times, and send an error message if not successful
         for i in range(number_of_retries):
-            recording_finalized = await self.chunk_manager.finalize_active_recording(int(total_chunks))
+            if total_chunks is not None:
+                recording_finalized = await self.chunk_manager.finalize_active_recording(int(total_chunks))
+            else:
+                recording_finalized = await self.chunk_manager.finalize_active_recording()
             if recording_finalized:
                 logger.info("Recording has been finalized.")
                 break
@@ -264,18 +405,33 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                 logger.info("Recording has not been finalized, sleeping for one second.")
                 await asyncio.sleep(1)
         if recording_finalized:
+            # write a log file indicating successful verification
+            await asyncio.to_thread(write_completion_log, success_status)
             # send back file info (and ETA for transcription)
-            logger.info("Recording finalized - sending file info to client.")
-            path = self.chunk_manager.get_file_path(recording_id)
-            size = self.chunk_manager.get_file_size(recording_id)
-            await self.send(text_data=json.dumps({
-                'message_type': 'recording_complete',
-                'path': path,
-                'size': size
-            }))
+            logger.info("Recording finalized.")
+            if send_info_to_client:
+                logger.info("Sending file info to client.")
+                await self.send_finalization_data(recording_id, success_status)
         else:
-            # TODO: finalize timeout, handle error here, send error message to client
-            pass
+            # write a log file indicating possible data loss
+            # TODO: integration test to cover this part
+            await asyncio.to_thread(write_completion_log, RecordingStatus.DATA_LOSS)
+            # send back file info (and ETA for transcription)
+            logger.info("Recording could not be finalized within timeout.")
+            if send_info_to_client:
+                logger.info("Sending file info to client.")
+                await self.send_finalization_data(recording_id, RecordingStatus.DATA_LOSS)
+
+    async def send_finalization_data(self, recording_id, status: RecordingStatus):
+        path = self.chunk_manager.get_file_path(recording_id)
+        size = self.chunk_manager.get_file_size(recording_id)
+        await self.send(text_data=json.dumps({
+            'message_type': 'recording_complete',
+            'recording_id': recording_id,
+            'completion_status': status.name.__str__(),
+            'path': path,
+            'size': size
+        }))
 
     async def send_to_client(self, json_object):
         await self.send(text_data=json.dumps(json_object))

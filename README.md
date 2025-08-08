@@ -2,7 +2,11 @@
 
 ## Python packages needed
 ``` bash
-pip install django django-cors-headers extendable-media-recorder extendable-media-recorder-wav-encoder django-rest-framework celery channels daphne pytest pytest-asyncio
+pip install django django-cors-headers django-rest-framework celery channels daphne pytest pytest-asyncio
+```
+## npm packages needed
+``` bash
+npm install extendable-media-recorder extendable-media-recorder-wav-encoder
 ```
 
 ## Start development server
@@ -14,7 +18,6 @@ daphne -p 8001 backend.asgi:application
 ```
 nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev --host
 ```
-
 
 ## Run unit test
 ```

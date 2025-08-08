@@ -25,12 +25,14 @@ const App = () => {
     const [sections, setSections] = useState([
         {
             title: "Recording Section 1",
-            isRecording: false, audioLevel: 0,
+            isRecording: false,
+            audioLevel: 0,
             duration: 0,
             animationFrameId: null,
             titleLocked: false,
             audioUrl: null,
-            audioPath: null
+            audioPath: null,
+            finalization_status: null
         },
     ]);
     const [currentSection, setCurrentSection] = useState(0);
@@ -115,10 +117,11 @@ const App = () => {
                         // TODO: maintain list of recordingIds, file path, size, and transcription. Map(recordingId -> {object})
                         // TODO: need to connect section id with recording id to make sure I update the right recording and transcription files
                         console.debug("Recording complete received from server.")
-                        if (data.path != null && data.size != null) {
-                            console.debug("File path: " + data.path);
-                            console.debug("File size: " + data.size);
-                        }
+                        console.debug("File path:", data.path);
+                        console.debug("File size:", data.size);
+                        console.debug("Recording ID:", data.recording_id);
+                        console.debug("Completion status:", data.completion_status);
+
                         // TODO: send back recording ID with recording_complete message and make sure to update appropriate section with audio path
                         // TODO: use relative link and fix react development server proxy to use localhost:8001
                         const updatedSections = [...sections];
@@ -240,7 +243,8 @@ const App = () => {
                     animationFrameId: null,
                     titleLocked: false,
                     audioUrl: null,
-                    audioPath: null
+                    audioPath: null,
+                    finalization_status: null
                 }
             ];
             setCurrentSection(newSections.length - 1); // Navigate to new section
