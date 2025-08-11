@@ -12,8 +12,6 @@ import os
 NUM_CHUNKS = 5
 # Location of test files, raw data files including headers
 TEST_DATA_DIR = Path(__file__).parent / "resources" / "test_chunks"
-current_path = Path(os.path.dirname(os.path.realpath(__file__)))
-REFERENCE_FILE = current_path / "resources/test_chunks/recording.wav"
 
 @pytest.fixture
 def audio_chunks():
@@ -88,6 +86,8 @@ async def test_audio_upload_and_finalize(audio_chunks, monkeypatch):
     assert final_response.get("message_type") == "recording_complete"
     assert "path" in final_response
     assert "size" in final_response
+    assert "completion_status" in final_response
+    assert final_response['completion_status'] == 'VERIFIED'
 
     # 5. Disconnect
     await communicator.disconnect()
