@@ -1,11 +1,10 @@
 from pathlib import Path
-
+import asyncio
 import pytest
 from channels.testing import WebsocketCommunicator
-
-
 from backend.asgi import application
-from dictaphone.audio_data_consumer import AudioChunkManager
+from dictaphone.audio_data_consumer import AudioChunkManager, RecordingStatus
+import os
 
 # --- Test Configuration ---
 # Integration test that tests the overall functionality of the AudioDataConsumer including correct handling of headers
@@ -13,6 +12,8 @@ from dictaphone.audio_data_consumer import AudioChunkManager
 NUM_CHUNKS = 5
 # Location of test files, raw data files including headers
 TEST_DATA_DIR = Path(__file__).parent / "resources" / "test_chunks"
+current_path = Path(os.path.dirname(os.path.realpath(__file__)))
+REFERENCE_FILE = current_path / "resources/test_chunks/recording.wav"
 
 @pytest.fixture
 def audio_chunks():
@@ -62,7 +63,7 @@ async def test_audio_upload_and_finalize(audio_chunks, monkeypatch):
     await communicator.send_json_to({
         "type": "control_message",
         "message": "start_recording",
-        "parameter": "My Test Recording"
+        "parameter": "Verified normal test recording"
     })
     response = await communicator.receive_json_from()
     assert response.get("message_type") == "ack_start_recording"
@@ -91,3 +92,115 @@ async def test_audio_upload_and_finalize(audio_chunks, monkeypatch):
     # 5. Disconnect
     await communicator.disconnect()
 
+@pytest.mark.asyncio
+async def test_disconnect_during_upload_finalize_recording(audio_chunks, monkeypatch):
+    """
+    Tests that if a client disconnects mid-upload, the consumer correctly
+    identifies the interruption and finalizes the recording with the data
+    it has received so far.
+    """
+    # We need to inspect the AudioChunkManager after the consumer is gone.
+    # This list will hold the instance created by our mocked __init__.
+    manager_holder = []
+    original_init = AudioChunkManager.__init__
+
+    def mock_init(self, consumer, load_data_from_server=True):
+        # Use the original __init__ but ensure it's a clean slate.
+        original_init(self, consumer, load_data_from_server=False)
+        # Store the instance so the test can access it later.
+        manager_holder.append(self)
+
+    monkeypatch.setattr(AudioChunkManager, "__init__", mock_init)
+
+    communicator = WebsocketCommunicator(application, "/ws/dictaphone/data/")
+    connected, _ = await communicator.connect()
+    assert connected, "Failed to connect to the WebSocket."
+
+    # 1. Start a new recording and capture the ID.
+    await communicator.send_json_to({
+        "type": "control_message",
+        "message": "start_recording",
+        "parameter": "Interrupted Test Recording"
+    })
+    response = await communicator.receive_json_from()
+    assert response.get("message_type") == "ack_start_recording"
+    recording_id = response.get("recording_id")
+    assert recording_id is not None
+
+    # 2. Send a few chunks, but not all of them, to simulate an interruption.
+    num_chunks_to_send = 2
+    for i in range(num_chunks_to_send):
+        await communicator.send_to(bytes_data=audio_chunks[i])
+        ack = await communicator.receive_json_from()
+        assert ack.get("chunk_index") == i
+
+    # 3. Abruptly disconnect the client, triggering the `disconnect` logic.
+    await communicator.disconnect()
+
+    # The `disconnect` method spawns a background task. We wait for it to run.
+    await asyncio.sleep(0.5)
+
+    # 4. Verify the outcome on the server side by inspecting the manager.
+    assert len(manager_holder) == 1, "AudioChunkManager was not instantiated."
+    manager = manager_holder[0]
+    final_status = manager.get_recording_status(recording_id)
+    assert final_status == RecordingStatus.INTERRUPTED_VERIFIED
+
+@pytest.mark.asyncio
+async def test_disconnect_during_upload_finalize_recording_detect_data_loss(audio_chunks, monkeypatch):
+    """
+    Tests that if a client disconnects mid-upload, the consumer correctly
+    identifies the interruption and detects that a chunk is missing during finalization
+    """
+    # We need to inspect the AudioChunkManager after the consumer is gone.
+    # This list will hold the instance created by our mocked __init__.
+    manager_holder = []
+    original_init = AudioChunkManager.__init__
+
+    def mock_init(self, consumer, load_data_from_server=True):
+        # Use the original __init__ but ensure it's a clean slate.
+        original_init(self, consumer, load_data_from_server=False)
+        # Store the instance so the test can access it later.
+        manager_holder.append(self)
+
+    monkeypatch.setattr(AudioChunkManager, "__init__", mock_init)
+
+    communicator = WebsocketCommunicator(application, "/ws/dictaphone/data/")
+    connected, _ = await communicator.connect()
+    assert connected, "Failed to connect to the WebSocket."
+
+    # 1. Start a new recording and capture the ID.
+    await communicator.send_json_to({
+        "type": "control_message",
+        "message": "start_recording",
+        "parameter": "Interrupted Test Recording with data loss"
+    })
+    response = await communicator.receive_json_from()
+    assert response.get("message_type") == "ack_start_recording"
+    recording_id = response.get("recording_id")
+    assert recording_id is not None
+
+    # 2. Send 4 chunks, but not the second
+    num_chunks_to_send = 4
+    for i in range(num_chunks_to_send):
+        if i==2:
+            # simulate data loss
+            continue
+        await communicator.send_to(bytes_data=audio_chunks[i])
+        if i>2:
+            resend = await communicator.receive_json_from()
+            assert resend.get("chunk_index") == 2
+        ack = await communicator.receive_json_from()
+        assert ack.get("chunk_index") == i
+
+    # 3. Abruptly disconnect the client, triggering the `disconnect` logic.
+    await communicator.disconnect()
+
+    # The `disconnect` method spawns a background task. We wait for it to run.
+    await asyncio.sleep(0.5)
+
+    # 4. Verify the outcome on the server side by inspecting the manager.
+    assert len(manager_holder) == 1, "AudioChunkManager was not instantiated."
+    manager = manager_holder[0]
+    final_status = manager.get_recording_status(recording_id)
+    assert final_status == RecordingStatus.DATA_LOSS

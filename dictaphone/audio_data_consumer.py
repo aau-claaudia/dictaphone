@@ -12,6 +12,13 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+class RecordingStatus(Enum):
+    """Represents the finalization status of a recording."""
+    VERIFIED = 1              # Normal completion
+    INTERRUPTED_VERIFIED = 2  # Recording was stopped by disconnect, but received data is okay (no detection of missing chunks)
+    DATA_LOSS = 3             # For when finalization fails due to missing data, e.g. a chunk is missing
+
+
 class AudioChunkManager:
     def __init__(self, consumer, load_data_from_server=True):
         self.consumer = consumer
@@ -93,8 +100,11 @@ class AudioChunkManager:
                     recording_valid = False
 
             if recording_valid:
-                # increment recording_id after completed recording
-                self.recordings[self.active_recording_id]['status'] = 'finished'
+                if total_chunks is None:
+                    # finishing interrupted recording
+                    self.recordings[self.active_recording_id]['status'] = RecordingStatus.INTERRUPTED_VERIFIED
+                else:
+                    self.recordings[self.active_recording_id]['status'] = RecordingStatus.VERIFIED
                 return True
             else:
                 return False
@@ -199,6 +209,19 @@ class AudioChunkManager:
     def is_active_recording(self, recording_id) -> bool:
         return recording_id in self.recordings and self.recordings[recording_id]['status'] == 'active'
 
+    def get_recording_status(self, recording_id):
+        if recording_id in self.recordings:
+            return self.recordings[recording_id]['status']
+        else:
+            return 'Recording ID not found'
+
+    def set_recording_status(self, recording_id, status: RecordingStatus):
+        if recording_id in self.recordings:
+            logger.info(f"Setting recoding status for recording ID: {recording_id} to {status.name}.")
+            self.recordings[recording_id]['status'] = status
+        else:
+            logger.info(f"Cannot update status, no such recording ID: {recording_id}.")
+
     def get_dirname(self, title) -> str:
         # Not empty and does not contain any of these: <>:"/\|?* or whitespace at ends
         if bool(title) and not re.search(r'[<>:"/\\|?*\0]', title) and title == title.strip():
@@ -216,13 +239,6 @@ class AudioChunkManager:
             return value >= 0
         except (ValueError, TypeError):
             return False
-
-
-class RecordingStatus(Enum):
-    """Represents the finalization status of a recording."""
-    VERIFIED = 1              # Normal completion
-    INTERRUPTED_VERIFIED = 2  # For when a recording is stopped but all data is received
-    DATA_LOSS = 3             # For when finalization fails due to missing data, e.g. a chunk is missing
 
 
 def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
@@ -287,15 +303,14 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
 
     async def disconnect(self, close_code):
         # this is called if the client disconnects, e.g. if the client browser window is closed or refreshed
-        # TODO: make integration test to cover this
         logger.info("Client disconnected.")
         if self.chunk_manager.is_active_recording(self.chunk_manager.get_active_recording_id()):
-            # try to finalize interrupted recording
+            # try to finalize the active recording
+            # the recording state will be RecordingStatus.INTERRUPTED_VERIFIED or RecordingStatus.DATA_LOSS
             logger.info(f"Disconnect - try to finalize active recording, id: {self.chunk_manager.get_active_recording_id().__str__()}")
             asyncio.create_task(self._handle_finalize_recording())
         else:
             logger.info("Disconnect - no active recording to finalize.")
-        #  recording state will be RecordingStatus.INTERRUPTED_VERIFIED or RecordingStatus.DATA_LOSS
 
     async def receive(self, text_data=None, bytes_data=None):
         """
@@ -402,8 +417,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                 logger.info("Recording has been finalized.")
                 break
             else:
-                logger.info("Recording has not been finalized, sleeping for one second.")
-                await asyncio.sleep(1)
+                if total_chunks is not None:
+                    # only sleep for normal finalization (not when handling interrupted recordings)
+                    logger.info("Recording has not been finalized, sleeping for one second.")
+                    await asyncio.sleep(1)
         if recording_finalized:
             # write a log file indicating successful verification
             await asyncio.to_thread(write_completion_log, success_status)
@@ -414,7 +431,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                 await self.send_finalization_data(recording_id, success_status)
         else:
             # write a log file indicating possible data loss
-            # TODO: integration test to cover this part
+            self.chunk_manager.set_recording_status(recording_id, RecordingStatus.DATA_LOSS)
             await asyncio.to_thread(write_completion_log, RecordingStatus.DATA_LOSS)
             # send back file info (and ETA for transcription)
             logger.info("Recording could not be finalized within timeout.")

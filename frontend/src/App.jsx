@@ -343,9 +343,8 @@ const App = () => {
             updatedSections[index].animationFrameId = animationFrameRequestId;
         }
         checkAudioLevel();
-        // TODO: create test data for the backend with 3 s. packets (5 packets?), add header before sending
-        mediaRecorderInstance.start(3000)
-        //mediaRecorderInstance.start(10000)
+        mediaRecorderInstance.start(2000) // data chunk size is 2 seconds of recording
+        //mediaRecorderInstance.start(2000)
     };
 
     const stopRecording = (index) => {
