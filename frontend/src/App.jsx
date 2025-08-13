@@ -3,6 +3,7 @@ import {csrfToken} from "./csrf.js";
 import {MediaRecorder, register} from 'extendable-media-recorder';
 import {connect} from 'extendable-media-recorder-wav-encoder';
 import Settings from "./Settings.jsx";
+import ErrorOverlay from "./Overlay.jsx";
 
 await register(await connect());
 
@@ -25,6 +26,7 @@ const App = () => {
     const [sections, setSections] = useState([
         {
             title: "Recording Section 1",
+            recordingId: null,
             isRecording: false,
             audioLevel: 0,
             duration: 0,
@@ -32,6 +34,7 @@ const App = () => {
             titleLocked: false,
             audioUrl: null,
             audioPath: null,
+            size: null,
             finalization_status: null
         },
     ]);
@@ -41,17 +44,15 @@ const App = () => {
     const [initiateRecordingFlag, setInitiateRecordingFlag] = useState(false);
     const [recordingId, setRecordingId] = useState(null);
     const chunkInventoryRef = useRef(new Map());
-
-    // TODO: state management, read state from session and server where appropriately
+    const [error, setError] = useState(null);
 
     useEffect(() => {
         // TODO: wss and authentication? authentication middleware
         const ws = new WebSocket("ws://localhost:8001/ws/dictaphone/data/");
         //const ws = new WebSocket("wss://localhost:8001/ws/dictaphone/data/");
-        ws.onopen = () => console.log("WebSocket connected");
-        ws.onclose = () => console.log("WebSocket disconnected");
-        // TODO: error handling, UI should be able show a proper message to the user
-        ws.onerror = (e) => console.error("WebSocket error", e);
+        ws.onopen = () => initializeState();
+        ws.onclose = () => handleDisconnect();
+        ws.onerror = (e) => handleWebSocketError(e);
         ws.onmessage = (e) => receiveMessage(e);
         socketRef.current = ws;
         setSocket(ws);
@@ -70,6 +71,36 @@ const App = () => {
     useEffect(() => {
         finalizingRef.current = finalizing;
     }, [finalizing]);
+
+    useEffect(() => {
+        recordingRef.current = recording;
+    }, [recording]);
+
+    useEffect(() => {
+        sessionStorage.setItem("modelSize", JSON.stringify(modelSize))
+    }, [modelSize]);
+    useEffect(() => {
+        sessionStorage.setItem("language", JSON.stringify(language))
+    }, [language]);
+
+    const handleRefresh = () => {
+        window.location.reload();
+    };
+
+    const initializeState = async () => {
+        // TODO: get initial state from server
+        console.log("WebSocket connected");
+    }
+
+    const handleDisconnect = async () => {
+        console.log("WebSocket disconnected");
+        setError(new Error("The server is not responding. Please check your connection. Interrupted recordings will be verified on server restart."));
+    }
+
+    const handleWebSocketError = async (e) => {
+        console.log("WebSocket error", e);
+        setError(new Error("Server communication error detected. Please check your connection."));
+    }
 
     const receiveMessage = async (message) => {
         // client receives three types of messages
@@ -112,26 +143,29 @@ const App = () => {
                         }
                         break;
                     case "recording_complete":
-                        // recording is verified to be complete from server (no missing chunks)
-                        // get the file size and ETA, update state to allow new recording
-                        // TODO: maintain list of recordingIds, file path, size, and transcription. Map(recordingId -> {object})
-                        // TODO: need to connect section id with recording id to make sure I update the right recording and transcription files
+                        // recording finalization on server is complete
                         console.debug("Recording complete received from server.")
                         console.debug("File path:", data.path);
                         console.debug("File size:", data.size);
                         console.debug("Recording ID:", data.recording_id);
                         console.debug("Completion status:", data.completion_status);
 
-                        // TODO: send back recording ID with recording_complete message and make sure to update appropriate section with audio path
-                        // TODO: use relative link and fix react development server proxy to use localhost:8001
+                        // TODO: maintain recordingId, file path, size, and transcription on appropriate section
+                        // TODO: find the right section to update (match recording ID), user may have navigated away from the section
                         const updatedSections = [...sections];
+                        // TODO: use relative link and fix react development server proxy to use localhost:8001
                         updatedSections[currentSection].audioUrl = "http://localhost:8001" + data.path;
+                        updatedSections[currentSection].finalization_status = data.completion_status;
+                        updatedSections[currentSection].size = data.size
                         setSections(updatedSections);
 
+                        // update state to allow new recording
                         setRecordingId(null);
                         setFinalizing(false);
                         // reset the chunk inventory Map
+                        console.debug("Chunk inventory size before clearing:", chunkInventoryRef.current.size);
                         chunkInventoryRef.current.clear();
+                        console.debug("Chunk inventory size after clearing:", chunkInventoryRef.current.size);
                         break;
                     case "request_chunk":
                         // handle data request for missing chunk
@@ -216,13 +250,6 @@ const App = () => {
         return header;
     }
 
-    useEffect(() => {
-        sessionStorage.setItem("modelSize", JSON.stringify(modelSize))
-    }, [modelSize]);
-    useEffect(() => {
-        sessionStorage.setItem("language", JSON.stringify(language))
-    }, [language]);
-
     const goToPreviousSection = () => {
         setCurrentSection((prev) => Math.max(prev - 1, 0));
     };
@@ -237,6 +264,7 @@ const App = () => {
                 ...prevSections,
                 {
                     title: `Recording Section ${prevSections.length + 1}`,
+                    recordingId: null,
                     isRecording: false,
                     audioLevel: 0,
                     duration: 0,
@@ -244,6 +272,7 @@ const App = () => {
                     titleLocked: false,
                     audioUrl: null,
                     audioPath: null,
+                    size: null,
                     finalization_status: null
                 }
             ];
@@ -272,6 +301,7 @@ const App = () => {
     const startRecording = async (index, updatedRecordingId) => {
         const updatedSections = [...sections];
         updatedSections[index].isRecording = true;
+        updatedSections[index].recordingId = updatedRecordingId;
         updatedSections[index].startTime = Date.now(); // Record the start time
         setSections(updatedSections);
 
@@ -382,13 +412,6 @@ const App = () => {
         return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
     };
 
-    useEffect(() => {
-        recordingRef.current = recording;
-    }, [recording]);
-
-    //TODO: load relevant state from session / backend server
-
-
     const isParsableAsFloat = (value) => {
         return !isNaN(parseFloat(value)) && isFinite(value);
     }
@@ -445,6 +468,10 @@ const App = () => {
 
     return (
         <div className='App'>
+            <ErrorOverlay
+                error={error}
+                onRefresh={handleRefresh}
+            />
             <h1>Dictaphone prototype</h1>
             <button className="transcribe-button" onClick={showOrHideSettings}>
                 {showSettings ? 'Hide settings' : 'Show settings'}
