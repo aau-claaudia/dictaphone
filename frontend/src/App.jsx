@@ -19,9 +19,9 @@ const App = () => {
     const [finalizing, setFinalizing] = useState(false);
     const finalizingRef = useRef(finalizing);
     const recordingRef = useRef(recording);
-    const [mediaRecorder, setMediaRecorder] = useState(null);
-    const [mediaStream, setMediaStream] = useState(null);
-    const [analyser, setAnalyser] = useState(null);
+    const mediaRecorderRef = useRef(null);
+    const mediaStreamRef = useRef(null);
+    const analyserRef = useRef(null);
     const [showSettings, setShowSettings] = useState(false);
     const [sections, setSections] = useState([
         {
@@ -90,11 +90,14 @@ const App = () => {
     const initializeState = async () => {
         // TODO: get initial state from server
         console.log("WebSocket connected");
+        // TODO: remember to set updatedSections[index].titleLocked = true; for existing recordings
     }
 
     const handleDisconnect = async () => {
         console.log("WebSocket disconnected");
-        setError(new Error("The server is not responding. Please check your connection. Interrupted recordings will be verified on server restart."));
+        setError(new Error("The server is not responding. Please check your connection. Data recorded before disconnect can be found on the server."));
+        // The server disconnected. Stop the active recording and clear the chunk inventory.
+        stopRecordingOnDisconnect();
     }
 
     const handleWebSocketError = async (e) => {
@@ -163,9 +166,9 @@ const App = () => {
                         setRecordingId(null);
                         setFinalizing(false);
                         // reset the chunk inventory Map
-                        console.debug("Chunk inventory size before clearing:", chunkInventoryRef.current.size);
+                        // console.debug("Chunk inventory size before clearing:", chunkInventoryRef.current.size);
                         chunkInventoryRef.current.clear();
-                        console.debug("Chunk inventory size after clearing:", chunkInventoryRef.current.size);
+                        // console.debug("Chunk inventory size after clearing:", chunkInventoryRef.current.size);
                         break;
                     case "request_chunk":
                         // handle data request for missing chunk
@@ -303,6 +306,8 @@ const App = () => {
         updatedSections[index].isRecording = true;
         updatedSections[index].recordingId = updatedRecordingId;
         updatedSections[index].startTime = Date.now(); // Record the start time
+        // Lock the title so that the file name can be used for file processing with backend
+        updatedSections[index].titleLocked = true;
         setSections(updatedSections);
 
         // Request access to the microphone
@@ -312,15 +317,15 @@ const App = () => {
                 echoCancellation: false
             }
         });
-        setMediaStream(streamInstance);
+        mediaStreamRef.current = streamInstance;
         const audioContext = new AudioContext();
         const source = audioContext.createMediaStreamSource(streamInstance);
         const analyserInstance = audioContext.createAnalyser();
         analyserInstance.fftSize = 256;
         source.connect(analyserInstance);
-        setAnalyser(analyserInstance)
+        analyserRef.current = analyserInstance;
         const mediaRecorderInstance = new MediaRecorder(streamInstance,{ mimeType: 'audio/wav' });
-        setMediaRecorder(mediaRecorderInstance);
+        mediaRecorderRef.current = mediaRecorderInstance;
         setInitiateRecordingFlag(false);
         setRecording(true);
 
@@ -374,15 +379,12 @@ const App = () => {
         }
         checkAudioLevel();
         mediaRecorderInstance.start(2000) // data chunk size is 2 seconds of recording
-        //mediaRecorderInstance.start(2000)
     };
 
     const stopRecording = (index) => {
         const updatedSections = [...sections];
         updatedSections[index].isRecording = false;
         updatedSections[index].audioLevel = 0;
-        // Lock the title after recording so that the file name can be used for file processing with backend
-        updatedSections[index].titleLocked = true;
         setSections(updatedSections);
         setRecording(false);
         setFinalizing(true);
@@ -390,21 +392,60 @@ const App = () => {
             console.debug("Stopping the animation frame...");
             cancelAnimationFrame(updatedSections[index].animationFrameId);
         }
-        if (mediaRecorder && mediaRecorder.state !== "inactive") {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
             console.debug("Stopping the recording...");
-            mediaRecorder.stop();
-        } else {
+            mediaRecorderRef.current.stop();
+        }
+        else {
             console.debug("MediaRecorder is not active or already stopped.");
         }
-        if (analyser) {
-            console.debug("Stopping the analyser...")
-            analyser.disconnect();
-        }
-        if (mediaStream) {
-            console.debug("Stopping the stream...");
-            mediaStream.getTracks().forEach(track => track.stop());
-        }
+        stopAnalyser();
+        stopStream();
     };
+
+    const stopRecordingOnDisconnect = () => {
+        setRecording(false);
+        setFinalizing(false);
+        // clear the chunk inventory data
+        chunkInventoryRef.current.clear();
+        // update all sections
+        const updatedSections = [...sections];
+        updatedSections.forEach(item => {
+            item.isRecording = false;
+            item.audioLevel = 0;
+            if (item.animationFrameId) {
+                console.debug("Stopping the animation frame...");
+                cancelAnimationFrame(item.animationFrameId);
+            }
+        })
+        setSections(updatedSections);
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+            // Detach listeners to prevent any further events from firing
+            mediaRecorderRef.current.ondataavailable = null;
+            mediaRecorderRef.current.onstop = null;
+            mediaRecorderRef.current.onerror = null;
+        }
+        else {
+            console.debug("MediaRecorder is not active or already stopped.");
+        }
+        stopAnalyser();
+        stopStream();
+    };
+
+    const stopAnalyser = () => {
+        if (analyserRef.current) {
+            console.debug("Stopping the analyser...")
+            analyserRef.current.disconnect();
+        }
+    }
+
+    const stopStream = () => {
+        if (mediaStreamRef.current) {
+            console.debug("Stopping the stream...");
+            mediaStreamRef.current.getTracks().forEach(track => track.stop());
+            mediaStreamRef.current = null;
+        }
+    }
 
     const formatDuration = (seconds) => {
         const minutes = Math.floor(seconds / 60);
@@ -506,7 +547,7 @@ const App = () => {
                                 disabled={recording || sections[currentSection].audioUrl || initiateRecordingFlag}>
                             Start recording
                         </button>
-                        <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection)}
+                        <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection, true)}
                                 disabled={!recording}>
                             Stop recording
                         </button>

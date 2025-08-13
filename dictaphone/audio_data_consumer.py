@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 class RecordingStatus(Enum):
     """Represents the finalization status of a recording."""
-    VERIFIED = 1              # Normal completion
-    INTERRUPTED_VERIFIED = 2  # Recording was stopped by disconnect, but received data is okay (no detection of missing chunks)
-    DATA_LOSS = 3             # For when finalization fails due to missing data, e.g. a chunk is missing
+    VERIFIED = 1                 # Normal completion
+    INTERRUPTED_VERIFIED = 2     # Recording was stopped by disconnect, but received data is okay (no detection of missing chunks)
+    DATA_LOSS = 3                # For when finalization fails due to missing data, e.g. a chunk is missing
+    INTERRUPTED_NOT_VERIFIED = 4 # Recording was stopped because of server disconnect, and could not be finalized
 
 
 class AudioChunkManager:
@@ -285,8 +286,20 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                                              "path": wav_path,
                                              "status": status,
                                              "title": title})
-                except (KeyError, IndexError) as e:
+                except (IndexError, TypeError, ValueError) as e:
                     logger.error(f"Could not parse completion log {log_path}: {e}")
+            else:
+                try:
+                    # If the server disconnected during recording, then only the wav file is present
+                    if os.path.isfile(wav_path):
+                        logger.info("Loading recording state for file with no completion log file")
+                        recording_id = int(parts[0])
+                        all_statuses.append({"recording_id": recording_id,
+                                             "path": wav_path,
+                                             "status": RecordingStatus.INTERRUPTED_NOT_VERIFIED,
+                                             "title": title})
+                except (IndexError, TypeError, ValueError) as e:
+                    logger.error(f"Could not parse recording ID from directory {recording_dir}: {e}")
     except FileNotFoundError:
         logger.error(f"Recordings directory not found: {base_recordings_path}")
     return all_statuses
