@@ -4,6 +4,7 @@ import {MediaRecorder, register} from 'extendable-media-recorder';
 import {connect} from 'extendable-media-recorder-wav-encoder';
 import Settings from "./Settings.jsx";
 import ErrorOverlay from "./Overlay.jsx";
+import { RecordingStatus } from './Constants.jsx';
 
 await register(await connect());
 
@@ -67,6 +68,7 @@ const App = () => {
         };
     }, []);
 
+    // TODO: refactor recording og finalizing til bare at være en ref variabel, og det samme med socket
     // Keep the ref updated with the latest finalizing value
     useEffect(() => {
         finalizingRef.current = finalizing;
@@ -88,9 +90,8 @@ const App = () => {
     };
 
     const initializeState = async () => {
-        // TODO: get initial state from server
         console.log("WebSocket connected");
-        // TODO: remember to set updatedSections[index].titleLocked = true; for existing recordings
+        sendControlMessage("initialize");
     }
 
     const handleDisconnect = async () => {
@@ -110,11 +111,38 @@ const App = () => {
         // 1) acknowledgments: this can be "ack_start_recording", "ack_stop_recording", "recording_complete" or "ack_chunk"
         // 2) data request: request a missing data chunk, "request_chunk"
         // 3) output files: transcribed files, "transcribed_file"
+        // 4) server data for initializing the app: "initialization_data"
         try {
             const data = JSON.parse(message.data);
             if (data.message_type) {
                 console.debug("Message type received from backend: " + data.message_type);
                 switch (data.message_type) {
+                    case "initialization_data":
+                        //if (data.recordings && data.recordings.size > 0) {
+                        if (data.recordings && data.recordings.length > 0) {
+                            const initializationSections = [];
+                            data.recordings.forEach(item => {
+                                // console.debug("Recording:", item);
+                                let sectionObject = {
+                                    title: item.title,
+                                    recordingId: item.recording_id,
+                                    isRecording: false,
+                                    audioLevel: 0,
+                                    duration: 0,
+                                    animationFrameId: null,
+                                    titleLocked: true,
+                                    audioUrl: "http://localhost:8001" + item.recording_file_path,
+                                    audioPath: null,
+                                    size: null,
+                                    finalization_status: item.status
+                                }
+                                initializationSections.push(sectionObject);
+                            })
+                            setSections(initializationSections);
+                        } else {
+                            console.debug("No initialization data returned.");
+                        }
+                        break;
                     case "ack_start_recording":
                         // handle start recording acknowledgment
                         if (data.recording_id) {
@@ -123,7 +151,7 @@ const App = () => {
                             await startRecording(currentSection, updatedRecordingId);
                         } else {
                             console.debug("No recording id returned.");
-                            // TODO: handle error
+                            setError(new Error("The server is not functioning as expected - no Recording ID returned. Contact your software provider."));
                         }
                         break;
                     case "ack_chunk":
@@ -153,13 +181,17 @@ const App = () => {
                         console.debug("Recording ID:", data.recording_id);
                         console.debug("Completion status:", data.completion_status);
 
-                        // TODO: maintain recordingId, file path, size, and transcription on appropriate section
-                        // TODO: find the right section to update (match recording ID), user may have navigated away from the section
                         const updatedSections = [...sections];
                         // TODO: use relative link and fix react development server proxy to use localhost:8001
-                        updatedSections[currentSection].audioUrl = "http://localhost:8001" + data.path;
-                        updatedSections[currentSection].finalization_status = data.completion_status;
-                        updatedSections[currentSection].size = data.size
+
+                        updatedSections.forEach(section => {
+                            if (section.recordingId === data.recording_id) {
+                                console.debug("Updating section with recording ID:", data.recording_id);
+                                section.audioUrl = "http://localhost:8001" + data.path;
+                                section.finalization_status = data.completion_status;
+                                section.size = data.size
+                            }
+                        })
                         setSections(updatedSections);
 
                         // update state to allow new recording
@@ -208,6 +240,51 @@ const App = () => {
         }
     }
 
+    const getStatusMessage = (status) => {
+        switch (status) {
+            case RecordingStatus.VERIFIED:
+                return 'VERIFIED';
+            case RecordingStatus.INTERRUPTED_VERIFIED:
+                return 'INTERRUPTED BUT VERIFIED';
+            case RecordingStatus.DATA_LOSS:
+                return 'DATA LOSS';
+            case RecordingStatus.INTERRUPTED_NOT_VERIFIED:
+                return 'INTERRUPTED';
+            default:
+                return 'Unknown status.';
+        }
+    }
+
+    const getStatusDescription = (status) => {
+        switch (status) {
+            case RecordingStatus.VERIFIED:
+                return 'Recording completed and verified.';
+            case RecordingStatus.INTERRUPTED_VERIFIED:
+                return 'Recording was interrupted, but all received data is verified.';
+            case RecordingStatus.DATA_LOSS:
+                return 'Error: Data loss detected. The recording is incomplete.';
+            case RecordingStatus.INTERRUPTED_NOT_VERIFIED:
+                return 'Error: Recording was interrupted and could not be verified.';
+            default:
+                return 'Unknown status.';
+        }
+    }
+
+    const getStatusStyling = (status) => {
+        switch (status) {
+            case RecordingStatus.VERIFIED:
+                return 'verified-file';
+            case RecordingStatus.INTERRUPTED_VERIFIED:
+                return 'verified-interrupted';
+            case RecordingStatus.DATA_LOSS:
+                return 'data-loss';
+            case RecordingStatus.INTERRUPTED_NOT_VERIFIED:
+                return 'verified-interrupted';
+            default:
+                return 'Unknown status.';
+        }
+    }
+
     const sendControlMessage = (message, parameter) => {
         const ws = socketRef.current;
         console.debug("Sending control message.");
@@ -220,7 +297,7 @@ const App = () => {
                     'parameter': parameter
                 }));
             } else {
-                console.error("WebSocket is not open or not initialized.");
+                console.debug("WebSocket is not open or not initialized.");
             }
         } else {
             if (ws && ws.readyState === WebSocket.OPEN) {
@@ -229,7 +306,7 @@ const App = () => {
                     'message': message
                 }));
             } else {
-                console.error("WebSocket is not open or not initialized.");
+                console.debug("WebSocket is not open or not initialized.");
             }
         }
     }
@@ -241,7 +318,7 @@ const App = () => {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(data);
         } else {
-            console.error("WebSocket is not open or not initialized.");
+            console.debug("WebSocket is not open or not initialized.");
         }
     };
 
@@ -453,15 +530,6 @@ const App = () => {
         return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
     };
 
-    const isParsableAsFloat = (value) => {
-        return !isNaN(parseFloat(value)) && isFinite(value);
-    }
-
-    // TODO: make hallucination threshold configurable through settings?
-    const isBelowConfidenceThreshold = (confidence) => {
-        return (isParsableAsFloat(confidence) && (parseFloat(confidence) < 0.55));
-    }
-
     // Function for showing or hiding the settings
     const showOrHideSettings = () => {
         setShowSettings(!showSettings);
@@ -473,38 +541,6 @@ const App = () => {
 
     const onUpdateLanguage = (language) => {
         setLanguage(language)
-    }
-
-    const resetRecording = async (file_path, index) => {
-        // delete the recording in the backend
-        console.debug("Deleting recording: " + file_path);
-        // Prepare the form data
-        const formData = new FormData();
-        formData.append("file_path", file_path);
-        try {
-            const response = await fetch("http://localhost:8000/reset-recording/", {
-                method: "POST",
-                credentials: 'include', // Include cookies
-                headers: {
-                    'X-CSRFToken': csrfToken, // Include the CSRF token
-                },
-                body: formData,
-            });
-            if (response.ok) {
-                const responseData = await response.json();
-                console.debug(responseData);
-            }
-        } catch (e) {
-            // Handle network errors
-            console.debug("Error deleting recording: " + e);
-        }
-        const updatedSections = [...sections];
-        // unlock the title after resetting the recording so that the user can rename if needed
-        updatedSections[index].titleLocked = false;
-        // reset the audio url
-        updatedSections[index].audioUrl = null;
-        updatedSections[index].audioPath = null;
-        setSections(updatedSections);
     }
 
     return (
@@ -552,23 +588,43 @@ const App = () => {
                             Stop recording
                         </button>
                         <button className="transcribe-stop-button"
-                                onClick={() => resetRecording(sections[currentSection].audioPath, currentSection)}
+                                onClick={() => console.debug("Calling reset recording.")}
                                 disabled={recording || !sections[currentSection].audioUrl}>
                             Reset recording
                         </button>
-                        <div className="audio-level-container">
-                            <label htmlFor={`audio-level-${currentSection}`}>Audio Level:</label>
-                            <progress
-                                id={`audio-level-${currentSection}`}
-                                className="audio-level-gauge"
-                                value={sections[currentSection].audioLevel}
-                                max="1"
-                            ></progress>
-                        </div>
-                        <div className="recording-duration">
-                            <label>Duration: </label>
-                            <span>{formatDuration(sections[currentSection].duration)}</span>
-                        </div>
+                        {
+                            !sections[currentSection].audioUrl && (
+                                <div className="audio-level-container">
+                                    <label htmlFor={`audio-level-${currentSection}`}>Audio Level:</label>
+                                    <progress
+                                        id={`audio-level-${currentSection}`}
+                                        className="audio-level-gauge"
+                                        value={sections[currentSection].audioLevel}
+                                        max="1"
+                                    ></progress>
+                                </div>
+                            )
+                        }
+                        {
+                            !sections[currentSection].audioUrl && (
+                                <div className="recording-duration">
+                                    <label>Duration: </label>
+                                    <span>{formatDuration(sections[currentSection].duration)}</span>
+                                </div>
+                            )
+                        }
+                        {
+                            sections[currentSection].audioUrl && (
+                                <div>
+                                    <h3>
+                                        Recording status: <span
+                                        className={`${getStatusStyling(sections[currentSection].finalization_status)} tooltip-hint`}
+                                        title={getStatusDescription(sections[currentSection].finalization_status)}
+                                    >{getStatusMessage(sections[currentSection].finalization_status)}</span>
+                                    </h3>
+                                </div>
+                            )
+                        }
                         {sections[currentSection].audioUrl && (
                             <audio
                                 controls

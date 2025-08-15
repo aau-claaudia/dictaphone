@@ -241,6 +241,10 @@ class AudioChunkManager:
         except (ValueError, TypeError):
             return False
 
+    async def get_recording_data(self) -> [dict]:
+        async with self.lock:
+            return self.recordings
+
 
 def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
     """
@@ -336,6 +340,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             'type': "control_message",
             'message': "stop_recording"
         }
+        {
+            'type': "control_message",
+            'message': "initialize"
+        }
         :param text_data: control messages from the client
         :param bytes_data: binary audio data from the client
         :return:
@@ -346,7 +354,6 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                 logger.info("Control message received.")
                 logger.info(data.get("message"))
                 if data.get("message") == "start_recording":
-                    # TODO: handle ValueError (start_new_recording), logging
                     recording_id = await self.chunk_manager.start_new_recording(data.get("parameter"))
                     # send back acknowledgment with recording_id
                     await self.send(text_data=json.dumps({
@@ -358,6 +365,22 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     logger.info(f"Received stop_recording. Total number of chunks in recording: {total_chunks}")
                     # Offload the finalization logic to a non-blocking background task
                     asyncio.create_task(self._handle_finalize_recording(total_chunks))
+                elif data.get("message") == "initialize":
+                    logger.info("Received initialize control message.")
+                    recording_data = await self.chunk_manager.get_recording_data()
+                    # RecordingStatus is not serializable by json.dumps
+                    client_data = {}
+                    for item in recording_data.values():
+                        client_data[item['id']] = {
+                            'recording_id': item['id'],
+                            'title': item['title'],
+                            'status': RecordingStatus(item['status']).value,
+                            'recording_file_path': item['recording_file_path']
+                        }
+                    await self.send(text_data=json.dumps({
+                        'message_type': 'initialization_data',
+                        'recordings': list(client_data.values())
+                    }))
                 else:
                     logger.info("Unknown control message")
         elif bytes_data is not None:
@@ -369,8 +392,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             #save_audio_data_for_test(bytes_data, recording_id, chunk_index, True)
             #save_audio_data_for_test(audio_data, recording_id, chunk_index, False)
             logger.info(f"Byte data received - header data - Rec. ID = {recording_id} chunk_index = {chunk_index}")
-            # TODO: handle ValueError (add_chunk), logging
-            chunk_added = await self.chunk_manager.add_chunk(recording_id, chunk_index, audio_data)
+            chunk_added = False
+            try:
+                chunk_added = await self.chunk_manager.add_chunk(recording_id, chunk_index, audio_data)
+            except ValueError as e:
+                logger.error(f"Error when adding chunk with Rec. ID = {recording_id} chunk_index = {chunk_index}", e)
             if chunk_added:
                 await self.send(text_data=json.dumps({
                     'message_type': 'ack_chunk',
