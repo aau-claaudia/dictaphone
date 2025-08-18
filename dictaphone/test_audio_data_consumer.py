@@ -87,7 +87,7 @@ async def test_audio_upload_and_finalize(audio_chunks, monkeypatch):
     assert "path" in final_response
     assert "size" in final_response
     assert "completion_status" in final_response
-    assert final_response['completion_status'] == 'VERIFIED'
+    assert final_response['completion_status'] == RecordingStatus.VERIFIED.value
 
     # 5. Disconnect
     await communicator.disconnect()

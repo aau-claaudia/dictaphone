@@ -278,7 +278,8 @@ h1 {
 }
 
 .verified-interrupted {
-  color: yellow;
+  color: black;
+  background-color: yellow;
   border: 1px solid yellow;
   border-radius: 10px;
   padding: 2px 5px;
@@ -300,4 +301,8 @@ h1 {
 
   /* Changes the mouse cursor to a 'help' icon (a question mark) on hover. */
   cursor: help;
+}
+
+.navigation-buttons:hover {
+  cursor: pointer;
 }

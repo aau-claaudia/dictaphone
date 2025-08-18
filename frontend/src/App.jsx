@@ -39,7 +39,9 @@ const App = () => {
             finalization_status: null
         },
     ]);
+    const sectionsRef = useRef(sections);
     const [currentSection, setCurrentSection] = useState(0);
+    const currentSectionRef = useRef(currentSection);
     const [socket, setSocket] = useState(null);
     const socketRef = useRef(null);
     const [initiateRecordingFlag, setInitiateRecordingFlag] = useState(false);
@@ -68,7 +70,6 @@ const App = () => {
         };
     }, []);
 
-    // TODO: refactor recording og finalizing til bare at være en ref variabel, og det samme med socket
     // Keep the ref updated with the latest finalizing value
     useEffect(() => {
         finalizingRef.current = finalizing;
@@ -77,7 +78,12 @@ const App = () => {
     useEffect(() => {
         recordingRef.current = recording;
     }, [recording]);
-
+    useEffect(() => {
+        sectionsRef.current = sections;
+    }, [sections]);
+    useEffect(() => {
+        currentSectionRef.current = currentSection;
+    }, [currentSection]);
     useEffect(() => {
         sessionStorage.setItem("modelSize", JSON.stringify(modelSize))
     }, [modelSize]);
@@ -138,6 +144,7 @@ const App = () => {
                                 }
                                 initializationSections.push(sectionObject);
                             })
+                            initializationSections.sort((a, b) => a.recordingId - b.recordingId);
                             setSections(initializationSections);
                         } else {
                             console.debug("No initialization data returned.");
@@ -148,7 +155,7 @@ const App = () => {
                         if (data.recording_id) {
                             let updatedRecordingId = data.recording_id;
                             setRecordingId(updatedRecordingId);
-                            await startRecording(currentSection, updatedRecordingId);
+                            await startRecording(currentSectionRef.current, updatedRecordingId);
                         } else {
                             console.debug("No recording id returned.");
                             setError(new Error("The server is not functioning as expected - no Recording ID returned. Contact your software provider."));
@@ -181,7 +188,7 @@ const App = () => {
                         console.debug("Recording ID:", data.recording_id);
                         console.debug("Completion status:", data.completion_status);
 
-                        const updatedSections = [...sections];
+                        const updatedSections = [...sectionsRef.current];
                         // TODO: use relative link and fix react development server proxy to use localhost:8001
 
                         updatedSections.forEach(section => {
@@ -235,8 +242,8 @@ const App = () => {
                 console.debug("Message from backend (raw):", data);
             }
         } catch (e) {
-            // TODO: error handling
             console.error("Failed to parse message from backend:", message.data);
+            setError(new Error("Unexpected error. Contact your software provider."));
         }
     }
 
@@ -245,7 +252,7 @@ const App = () => {
             case RecordingStatus.VERIFIED:
                 return 'VERIFIED';
             case RecordingStatus.INTERRUPTED_VERIFIED:
-                return 'INTERRUPTED BUT VERIFIED';
+                return 'INTERRUPTED, VERIFIED';
             case RecordingStatus.DATA_LOSS:
                 return 'DATA LOSS';
             case RecordingStatus.INTERRUPTED_NOT_VERIFIED:
@@ -331,11 +338,11 @@ const App = () => {
     }
 
     const goToPreviousSection = () => {
-        setCurrentSection((prev) => Math.max(prev - 1, 0));
+        setCurrentSection((prev) => prev - 1);
     };
 
     const goToNextSection = () => {
-        setCurrentSection((prev) => Math.min(prev + 1, sections.length - 1));
+        setCurrentSection((prev) => prev + 1);
     };
 
     const addSection = () => {
@@ -363,7 +370,7 @@ const App = () => {
 
     const handleTitleChange = (e, index) => {
         const value = e.target.value.replace(/[^a-zA-Z0-9ÆæØøÅå ]/g, ""); // Remove special characters
-        const updatedSections = [...sections];
+        const updatedSections = [...sectionsRef.current];
         updatedSections[index].title = value;
         setSections(updatedSections);
         // Dynamically adjust the input width
@@ -379,7 +386,7 @@ const App = () => {
     }
 
     const startRecording = async (index, updatedRecordingId) => {
-        const updatedSections = [...sections];
+        const updatedSections = [...sectionsRef.current];
         updatedSections[index].isRecording = true;
         updatedSections[index].recordingId = updatedRecordingId;
         updatedSections[index].startTime = Date.now(); // Record the start time
@@ -459,7 +466,7 @@ const App = () => {
     };
 
     const stopRecording = (index) => {
-        const updatedSections = [...sections];
+        const updatedSections = [...sectionsRef.current];
         updatedSections[index].isRecording = false;
         updatedSections[index].audioLevel = 0;
         setSections(updatedSections);
@@ -486,7 +493,7 @@ const App = () => {
         // clear the chunk inventory data
         chunkInventoryRef.current.clear();
         // update all sections
-        const updatedSections = [...sections];
+        const updatedSections = [...sectionsRef.current];
         updatedSections.forEach(item => {
             item.isRecording = false;
             item.audioLevel = 0;
@@ -651,13 +658,13 @@ const App = () => {
                     </div>
                     <div className="section-navigation"
                          style={{display: "flex", justifyContent: "center", marginTop: 20}}>
-                        <button onClick={goToPreviousSection} disabled={currentSection === 0}>
+                        <button className="navigation-buttons" onClick={goToPreviousSection} disabled={currentSection === 0}>
                             Previous
                         </button>
                         <span style={{margin: "0 10px"}}>
                                 Recording {currentSection + 1} of {sections.length}
                             </span>
-                        <button onClick={goToNextSection} disabled={currentSection === sections.length - 1}>
+                        <button className="navigation-buttons" onClick={goToNextSection} disabled={currentSection === sections.length - 1}>
                             Next
                         </button>
                     </div>

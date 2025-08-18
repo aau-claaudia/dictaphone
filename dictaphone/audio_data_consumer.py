@@ -274,7 +274,7 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
             log_path = os.path.join(recording_dir, "completion_log.txt")
             wav_path = os.path.join(recording_dir, "recording.wav")
 
-            # We only care about directories that have both a log and a wav file
+            # Handle case where there is both a log and a wav file
             if os.path.isfile(log_path) and os.path.isfile(wav_path):
                 try:
                     with open(log_path, "r") as f:
@@ -292,21 +292,36 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                                              "title": title})
                 except (IndexError, TypeError, ValueError) as e:
                     logger.error(f"Could not parse completion log {log_path}: {e}")
-            else:
+            elif os.path.isfile(wav_path):
                 try:
                     # If the server disconnected during recording, then only the wav file is present
-                    if os.path.isfile(wav_path):
-                        logger.info("Loading recording state for file with no completion log file")
-                        recording_id = int(parts[0])
-                        all_statuses.append({"recording_id": recording_id,
-                                             "path": wav_path,
-                                             "status": RecordingStatus.INTERRUPTED_NOT_VERIFIED,
-                                             "title": title})
+                    logger.info("Loading recording state for file with no completion log file")
+                    recording_id = int(parts[0])
+                    all_statuses.append({"recording_id": recording_id,
+                                         "path": wav_path,
+                                         "status": RecordingStatus.INTERRUPTED_NOT_VERIFIED,
+                                         "title": title})
                 except (IndexError, TypeError, ValueError) as e:
                     logger.error(f"Could not parse recording ID from directory {recording_dir}: {e}")
+            elif os.path.isfile(log_path):
+                # handle case with only log file, exceptional error, cleanup directory
+                os.remove(log_path)
+                logger.error("The recording directory only has a log file, recording was interrupted before any data was written, cleaning.")
+                clean_dir(recording_dir)
+            else:
+                # handle case with empty directory, exceptional error, cleanup directory
+                logger.error("The recording directory is empty, cleaning.")
+                clean_dir(recording_dir)
     except FileNotFoundError:
         logger.error(f"Recordings directory not found: {base_recordings_path}")
     return all_statuses
+
+def clean_dir(path):
+    try:
+        # handle case with empty directory, exceptional error, cleanup directory
+        os.removedirs(path)
+    except FileNotFoundError as e:
+        logger.error("Directory could not be cleaned.", e)
 
 
 class AudioDataConsumer(AsyncWebsocketConsumer):
@@ -484,7 +499,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'message_type': 'recording_complete',
             'recording_id': recording_id,
-            'completion_status': status.name.__str__(),
+            'completion_status': status.value,
             'path': path,
             'size': size
         }))
