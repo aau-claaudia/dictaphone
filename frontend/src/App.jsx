@@ -26,7 +26,7 @@ const App = () => {
     const [showSettings, setShowSettings] = useState(false);
     const [sections, setSections] = useState([
         {
-            title: "Recording Section 1",
+            title: "Recording 1",
             recordingId: null,
             isRecording: false,
             audioLevel: 0,
@@ -36,7 +36,8 @@ const App = () => {
             audioUrl: null,
             audioPath: null,
             size: null,
-            finalization_status: null
+            finalization_status: null,
+            transcribing: false
         },
     ]);
     const sectionsRef = useRef(sections);
@@ -350,7 +351,7 @@ const App = () => {
             const newSections = [
                 ...prevSections,
                 {
-                    title: `Recording Section ${prevSections.length + 1}`,
+                    title: `Recording ${prevSections.length + 1}`,
                     recordingId: null,
                     isRecording: false,
                     audioLevel: 0,
@@ -360,7 +361,8 @@ const App = () => {
                     audioUrl: null,
                     audioPath: null,
                     size: null,
-                    finalization_status: null
+                    finalization_status: null,
+                    transcribing: false
                 }
             ];
             setCurrentSection(newSections.length - 1); // Navigate to new section
@@ -557,20 +559,6 @@ const App = () => {
                 onRefresh={handleRefresh}
             />
             <h1>Dictaphone prototype</h1>
-            <button className="transcribe-button" onClick={showOrHideSettings}>
-                {showSettings ? 'Hide settings' : 'Show settings'}
-            </button>
-            {
-                showSettings && (
-                    <Settings
-                        onUpdateModel={onUpdateModel}
-                        currentModelSize={modelSize}
-                        onUpdateLanguage={onUpdateLanguage}
-                        currentLanguage={language}
-                    />
-                )
-            }
-
             <div>
                 <div className="recording-section">
                     <div className="recording-header">
@@ -588,7 +576,7 @@ const App = () => {
                     <div className="recording-content">
                         <button className="transcribe-button" onClick={() => initiateRecording(currentSection)}
                                 disabled={recording || sections[currentSection].audioUrl || initiateRecordingFlag}>
-                            Start recording
+                            {recording ? (initiateRecordingFlag ? 'Initiating' : 'Recording') : 'Start recording'}
                         </button>
                         <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection, true)}
                                 disabled={!recording}>
@@ -597,7 +585,7 @@ const App = () => {
                         <button className="transcribe-stop-button"
                                 onClick={() => console.debug("Calling reset recording.")}
                                 disabled={recording || !sections[currentSection].audioUrl}>
-                            Reset recording
+                            Delete recording
                         </button>
                         {
                             !sections[currentSection].audioUrl && (
@@ -641,15 +629,30 @@ const App = () => {
                                 Your browser does not support the audio element.
                             </audio>
                         )}
+                    </div>
+                    <div>
                         <div style={{marginTop: 10}}>
                             <button className="transcribe-button" onClick={() => console.debug("test")}
                                     disabled={recording || !sections[currentSection].audioUrl}>
-                                Start transcription
+                                {sections[currentSection].transcribing ? 'In progress' : 'Transcribe recording'}
                             </button>
                             <button className="transcribe-stop-button" onClick={() => console.debug("test")}
                                     disabled={true}>
                                 Stop transcription
                             </button>
+                            <button className="transcribe-button" onClick={showOrHideSettings}>
+                                {showSettings ? 'Hide settings' : 'Show settings'}
+                            </button>
+                            {
+                                showSettings && (
+                                    <Settings
+                                        onUpdateModel={onUpdateModel}
+                                        currentModelSize={modelSize}
+                                        onUpdateLanguage={onUpdateLanguage}
+                                        currentLanguage={language}
+                                    />
+                                )
+                            }
                         </div>
                         <h3>Transcription Status</h3>
                         <p>Here the status will be shown.</p>
@@ -658,13 +661,15 @@ const App = () => {
                     </div>
                     <div className="section-navigation"
                          style={{display: "flex", justifyContent: "center", marginTop: 20}}>
-                        <button className="navigation-buttons" onClick={goToPreviousSection} disabled={currentSection === 0}>
+                        <button className="navigation-buttons" onClick={goToPreviousSection}
+                                disabled={currentSection === 0}>
                             Previous
                         </button>
                         <span style={{margin: "0 10px"}}>
                                 Recording {currentSection + 1} of {sections.length}
                             </span>
-                        <button className="navigation-buttons" onClick={goToNextSection} disabled={currentSection === sections.length - 1}>
+                        <button className="navigation-buttons" onClick={goToNextSection}
+                                disabled={currentSection === sections.length - 1}>
                             Next
                         </button>
                     </div>
