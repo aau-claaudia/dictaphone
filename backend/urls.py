@@ -16,15 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, re_path
-from dictaphone.views import index, FileUploadView, GetTranscriptionsView, reset_data, ResetRecordingView, SilenceThresholdView, serve_file
+from dictaphone.views import index, serve_file
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('upload-audio-chunk/', FileUploadView.as_view(), name="upload_audio_chunk"),
-    path('get-transcriptions/', GetTranscriptionsView.as_view(), name="get_transcriptions"),
-    path('update-silence-threshold/', SilenceThresholdView.as_view(), name="update_silence_threshold"),
-    path('reset-data/', reset_data, name="reset_data"),
-    path('reset-recording/', ResetRecordingView.as_view(), name="reset_recording"),
     re_path(r'^.*media/RECORDINGS/(?P<path>.*)$', serve_file, name='serve_media_file'), # pattern for download
     re_path(r'^.*media/TRANSCRIPTIONS/(?P<path>.*)$', serve_file, name='serve_media_file'), # pattern for download
     re_path(r'^work/(?P<path>.*)$', serve_file, name='serve_work_file'), # pattern for download
