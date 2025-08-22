@@ -37,7 +37,8 @@ const App = () => {
             audioPath: null,
             size: null,
             finalization_status: null,
-            transcribing: false
+            transcribing: false,
+            transcriptionStartTime: null
         },
     ]);
     const sectionsRef = useRef(sections);
@@ -51,7 +52,7 @@ const App = () => {
     const [error, setError] = useState(null);
 
     useEffect(() => {
-        // TODO: wss and authentication? authentication middleware
+        // TODO: wss for test and production
         const ws = new WebSocket("ws://localhost:8001/ws/dictaphone/data/");
         //const ws = new WebSocket("wss://localhost:8001/ws/dictaphone/data/");
         ws.onopen = () => initializeState();
@@ -362,7 +363,8 @@ const App = () => {
                     audioPath: null,
                     size: null,
                     finalization_status: null,
-                    transcribing: false
+                    transcribing: false,
+                    transcriptionStartTime: null
                 }
             ];
             setCurrentSection(newSections.length - 1); // Navigate to new section
@@ -383,8 +385,26 @@ const App = () => {
     const initiateRecording = () => {
         setInitiateRecordingFlag(true);
         sendControlMessage("start_recording", sections[currentSection].title);
-        // TODO: do I need anything here to show to the user this is being set up? Maybe a spinner on the button. Or disable the start button, while wait with enabling the stop button (this already happens).
-        // TODO: maybe not (since it happens very fast) - maybe just errorhandling in case it takes too long or fails, will this be handle by general error handling when the serer is not responding?
+    }
+
+    const startTranscription = (recordingId) => {
+        // update the section (start time and transcribing flag
+        const updatedSections = [...sectionsRef.current];
+        updatedSections.forEach(section => {
+            if (section.recordingId === recordingId) {
+                console.debug("Updating section with transcription details for recording ID:", recordingId);
+                section.transcribing = true;
+                section.transcriptionStartTime = Date.now();
+            }
+        })
+        setSections(updatedSections);
+        // send control message to backend
+
+        sendControlMessage("start_transcription", {
+            recordingId: recordingId,
+            model: modelSize,
+            language: language
+        });
     }
 
     const startRecording = async (index, updatedRecordingId) => {
@@ -632,7 +652,7 @@ const App = () => {
                     </div>
                     <div>
                         <div style={{marginTop: 10}}>
-                            <button className="transcribe-button" onClick={() => console.debug("test")}
+                            <button className="transcribe-button" onClick={() => startTranscription(sections[currentSection].recordingId)}
                                     disabled={recording || !sections[currentSection].audioUrl}>
                                 {sections[currentSection].transcribing ? 'In progress' : 'Transcribe recording'}
                             </button>

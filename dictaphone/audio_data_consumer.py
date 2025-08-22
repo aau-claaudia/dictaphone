@@ -9,6 +9,7 @@ import re
 from django.conf import settings
 import logging
 from enum import Enum
+from .tasks import transcription_task
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +44,8 @@ class AudioChunkManager:
                 'id': recording_id,
                 'title': recording['title'],
                 'status': recording['status'],
-                'recording_file_path': recording['path']
+                'recording_file_path': recording['file_path'],
+                'recording_path': recording['recording_path']
             }
             if recording_id > max_recording_id:
                 max_recording_id = recording_id
@@ -201,6 +203,9 @@ class AudioChunkManager:
     def get_file_path(self, recording_id) -> str:
         return self.recordings[recording_id]['recording_file_path']
 
+    def get_recording_dir_path(self, recording_id) -> str:
+        return self.recordings[recording_id]['recording_path']
+
     def get_file_size(self, recording_id) -> int:
         return os.path.getsize(self.recordings[recording_id]['recording_file_path'])
 
@@ -287,7 +292,8 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                         status_name = lines[1].strip()
                         status = RecordingStatus[status_name] # Convert string back to enum
                         all_statuses.append({"recording_id": recording_id,
-                                             "path": wav_path,
+                                             "recording_path": recording_dir,
+                                             "file_path": wav_path,
                                              "status": status,
                                              "title": title})
                 except (IndexError, TypeError, ValueError) as e:
@@ -328,9 +334,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.chunk_manager = AudioChunkManager(self)
+        self.active_tasks = {} # {task_id: {details}}
+        self.monitor_task = None
 
     async def connect(self):
-        # TODO: authentication
+        # TODO: we need to test that Websocket authentication is not needed, e.g. only the user starting the job can connect to the Websocket
         await self.accept()
 
     async def disconnect(self, close_code):
@@ -347,18 +355,12 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
     async def receive(self, text_data=None, bytes_data=None):
         """
         control messages:
-        {
-            'type': "control_message",
-            'message': "start_recording"
-        }
-        {
-            'type': "control_message",
-            'message': "stop_recording"
-        }
-        {
-            'type': "control_message",
-            'message': "initialize"
-        }
+        start_recording
+        stop_recording
+        initialize
+        start_transcription
+        cancel_transcription
+
         :param text_data: control messages from the client
         :param bytes_data: binary audio data from the client
         :return:
@@ -396,6 +398,20 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                         'message_type': 'initialization_data',
                         'recordings': list(client_data.values())
                     }))
+                elif data.get("message") == "start_transcription":
+                    logger.info("Received start_transcription control message.")
+                    param_object = data.get("parameter")
+                    recording_id = param_object.get("recordingId")
+                    model = param_object.get("model")
+                    language = param_object.get("language")
+                    logger.info(f"Transcription params: {recording_id}, {model}, {language}")
+                    # start transcription task and send back the task id
+                    await self.start_transcription_task(recording_id, model, language)
+                elif data.get("message") == "cancel_transcription":
+                    param_object = data.get("parameter")
+                    task_id = param_object.get("taskId")
+                    logger.info(f"Received cancel_transcription control message, taks ID: {task_id}")
+                    await self.cancel_transcription_task(task_id)
                 else:
                     logger.info("Unknown control message")
         elif bytes_data is not None:
@@ -507,6 +523,82 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
     async def send_to_client(self, json_object):
         await self.send(text_data=json.dumps(json_object))
 
+    async def start_transcription_task(self, recording_id, model, language):
+        # Start the server monitoring
+        if self.monitor_task is None:
+            logger.info("Starting server monitoring of transcription tasks.")
+            self.monitor_task = asyncio.create_task(self._task_monitor(self.active_tasks))
+        # Start the Celery task
+        recording_dir_path = self.chunk_manager.get_recording_dir_path(recording_id)
+        recording_file_path = self.chunk_manager.get_file_path(recording_id)
+        task = transcription_task.delay(recording_dir_path, recording_file_path, model, language)
+        # Store the task ID to monitor it
+        task_id = task.id
+        self.active_tasks[task_id] = {
+            "recording_id": recording_id,
+            "transcription_dir": os.path.join(recording_dir_path, "TRANSCRIPTIONS")
+        }
+        logger.info(f"Started transcription task {task_id} for recording {recording_id}")
+        # Send the task_id back to the client
+        await self.send(text_data=json.dumps({
+            "type": "transcription_started",
+            "task_id": task_id,
+            "recording_id": recording_id
+        }))
+
+    # TODO: test the cancelling logic after implementing the client side logic
+    async def cancel_transcription_task(self, task_id:str):
+        if not task_id or task_id not in self.active_tasks:
+            logger.warning(f"Received cancellation request for unknown or missing task_id: {task_id}")
+            return
+        logger.info(f"Requesting cancellation for task {task_id}")
+        task_result = transcription_task.AsyncResult(task_id)
+        task_result.abort()  # Abort the task
+
+    async def _task_monitor(self, active_tasks: dict):
+        try:
+            while True:
+                await asyncio.sleep(5) # Check every 5 second
+                if not active_tasks:
+                    logger.info("No active tasks to monitor. Stopping monitor.")
+                    break # Exit the loop, which will end the task.
+                # Iterate over a copy of the keys as the dictionary may change size
+                for task_id in list(active_tasks.keys()):
+                    result = transcription_task.AsyncResult(task_id)
+                    if result.ready(): # The task has finished (successfully or not)
+                        try:
+                            task_info = active_tasks.pop(task_id)
+                            logger.info(f"Task {task_id} for recording {task_info['recording_id']} finished with state: {result.state}")
+                            await self.send(text_data=json.dumps({
+                                "type": "transcription_completed",
+                                "task_id": task_id,
+                                "recording_id": task_info['recording_id'],
+                                "state": result.state, # e.g., 'SUCCESS', 'FAILURE', 'REVOKED'
+                                "results": prepare_results(task_info["transcription_dir"])
+                            }))
+                        except KeyError:
+                            # Task was removed in another operation, just continue
+                            pass
+                    else:
+                        logger.info(f"Transcription task {task_id} not ready yet.")
+        finally:
+            # This ensures the monitor task reference is cleared, so a new one can be started later.
+            logger.info("Transcription task monitor has shut down.")
+            self.monitor_task = None
+
+
+def prepare_results(transcription_dir: str) -> list[dict]:
+    results = []
+    if os.path.isdir(transcription_dir):
+        # List the files in the output directory and construct the URLs
+        for filename in os.listdir(transcription_dir):
+            file_url = os.path.join(transcription_dir, filename)
+            results.append({
+                'file_name': filename,
+                'file_url': file_url
+            })
+        results.sort(key=lambda x: x['file_name'])
+    return results
 
 def save_audio_data_for_test(audio_data, recording_id, chunk_index, includes_header, directory="dictaphone/resources/test_chunks"):
     """

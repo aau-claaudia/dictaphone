@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -135,7 +135,13 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',  # Vite dev server
+    'http://127.0.0.1:5173',
     'http://localhost:8000', # Django server
+    'http://localhost:8080', # React Nginx server
+    'https://localhost:5173',  # Vite dev server
+    'https://127.0.0.1:5173',
+    'https://localhost:8000', # Django server
+    'https://localhost:8080', # React Nginx server
 ]
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:5173',  # Vite dev server
@@ -158,11 +164,14 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 CELERY_BROKER_URL = 'redis://localhost:6379/0'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
 
-# TODO: configuration for deployment? something else than im-mem
 # see https://channels.readthedocs.io/en/latest/deploying.html
 CHANNEL_LAYERS = {
     'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            # Using different database number (1) to keep data separate from celery data (0)
+            "hosts": [os.environ.get('REDIS_URL', 'redis://localhost:6379/1')],
+        },
     },
 }
 
