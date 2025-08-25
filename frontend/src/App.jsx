@@ -133,7 +133,7 @@ const App = () => {
                         if (data.recordings && data.recordings.length > 0) {
                             const initializationSections = [];
                             data.recordings.forEach(item => {
-                                // console.debug("Recording:", item);
+                                //console.debug("Recording:", item);
                                 let sectionObject = {
                                     title: item.title,
                                     recordingId: item.recording_id,
@@ -145,7 +145,11 @@ const App = () => {
                                     audioUrl: "http://localhost:8001" + item.recording_file_path,
                                     audioPath: null,
                                     size: null,
-                                    finalization_status: item.status
+                                    finalization_status: item.status,
+                                    transcribing: false,
+                                    transcriptionStartTime: null,
+                                    taskId: null,
+                                    transcriptionResults: item.results
                                 }
                                 initializationSections.push(sectionObject);
                             })

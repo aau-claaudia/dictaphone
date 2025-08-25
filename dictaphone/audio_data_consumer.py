@@ -45,7 +45,8 @@ class AudioChunkManager:
                 'title': recording['title'],
                 'status': recording['status'],
                 'recording_file_path': recording['file_path'],
-                'recording_path': recording['recording_path']
+                'recording_path': recording['recording_path'],
+                'results': recording['results'] if recording['results'] is not None else []
             }
             if recording_id > max_recording_id:
                 max_recording_id = recording_id
@@ -291,11 +292,18 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                         recording_id = int(lines[0].strip())
                         status_name = lines[1].strip()
                         status = RecordingStatus[status_name] # Convert string back to enum
+                        # get transcription file links
+                        transcription_dir = os.path.join(recording_dir, "TRANSCRIPTIONS")
+                        results = None
+                        if os.path.isdir(transcription_dir):
+                            logger.info("Loading transcription file links.")
+                            results = prepare_results(transcription_dir)
                         all_statuses.append({"recording_id": recording_id,
                                              "recording_path": recording_dir,
                                              "file_path": wav_path,
                                              "status": status,
-                                             "title": title})
+                                             "title": title,
+                                             "results": results})
                 except (IndexError, TypeError, ValueError) as e:
                     logger.error(f"Could not parse completion log {log_path}: {e}")
             elif os.path.isfile(wav_path):
@@ -392,7 +400,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                             'recording_id': item['id'],
                             'title': item['title'],
                             'status': RecordingStatus(item['status']).value,
-                            'recording_file_path': item['recording_file_path']
+                            'recording_file_path': item['recording_file_path'],
+                            'results': item['results']
                         }
                     await self.send(text_data=json.dumps({
                         'message_type': 'initialization_data',
@@ -552,8 +561,6 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             "file_size": size
         }))
 
-    # TODO: test the cancelling logic after implementing the client side logic
-    # TODO: test that the task is popped and that the monitor task stops
     async def cancel_transcription_task(self, task_id:str):
         if not task_id or task_id not in self.active_tasks:
             logger.warning(f"Received cancellation request for unknown or missing task_id: {task_id}")
