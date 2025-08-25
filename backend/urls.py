@@ -21,7 +21,6 @@ from dictaphone.views import index, serve_file
 urlpatterns = [
     path('admin/', admin.site.urls),
     re_path(r'^.*media/RECORDINGS/(?P<path>.*)$', serve_file, name='serve_media_file'), # pattern for download
-    re_path(r'^.*media/TRANSCRIPTIONS/(?P<path>.*)$', serve_file, name='serve_media_file'), # pattern for download
     re_path(r'^work/(?P<path>.*)$', serve_file, name='serve_work_file'), # pattern for download
     re_path(r'^.*$', index, name='index'),  # Catch-all pattern to serve the React app
 ]

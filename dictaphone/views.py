@@ -12,13 +12,12 @@ def index(request):
     return HttpResponse("Welcome to the Dictaphone app!")
 
 def serve_file(request, path):
-    #logger.info("Executing the serve_file view")
+    logger.info("Executing the serve_file view")
+    logger.info("Request path: " + request.path)
     # Determine the base directory based on the URL prefix
     # TODO: redo serve file path logic
     if request.path.startswith('/work/'):
         base_dir = '/work'  # the files are saved here on UCloud
-    elif 'media/TRANSCRIPTIONS' in request.path:
-        base_dir = os.path.join(settings.MEDIA_ROOT, 'TRANSCRIPTIONS/')
     elif 'media/RECORDINGS' in request.path:
         # Open the file and create the response
         with open(request.path, 'rb') as f:

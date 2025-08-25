@@ -531,6 +531,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         # Start the Celery task
         recording_dir_path = self.chunk_manager.get_recording_dir_path(recording_id)
         recording_file_path = self.chunk_manager.get_file_path(recording_id)
+        # Get the file size
+        try:
+            size = os.path.getsize(recording_file_path)
+        except FileNotFoundError:
+            logger.error(f"Error when starting transcription, nu such file path, recording ID: {recording_id}")
         task = transcription_task.delay(recording_dir_path, recording_file_path, model, language)
         # Store the task ID to monitor it
         task_id = task.id
@@ -541,12 +546,14 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         logger.info(f"Started transcription task {task_id} for recording {recording_id}")
         # Send the task_id back to the client
         await self.send(text_data=json.dumps({
-            "type": "transcription_started",
+            "message_type": "transcription_started",
             "task_id": task_id,
-            "recording_id": recording_id
+            "recording_id": recording_id,
+            "file_size": size
         }))
 
     # TODO: test the cancelling logic after implementing the client side logic
+    # TODO: test that the task is popped and that the monitor task stops
     async def cancel_transcription_task(self, task_id:str):
         if not task_id or task_id not in self.active_tasks:
             logger.warning(f"Received cancellation request for unknown or missing task_id: {task_id}")
@@ -554,6 +561,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         logger.info(f"Requesting cancellation for task {task_id}")
         task_result = transcription_task.AsyncResult(task_id)
         task_result.abort()  # Abort the task
+        # remove from active_tasks
+        self.active_tasks.pop(task_id)
 
     async def _task_monitor(self, active_tasks: dict):
         try:
@@ -570,7 +579,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                             task_info = active_tasks.pop(task_id)
                             logger.info(f"Task {task_id} for recording {task_info['recording_id']} finished with state: {result.state}")
                             await self.send(text_data=json.dumps({
-                                "type": "transcription_completed",
+                                "message_type": "transcription_completed",
                                 "task_id": task_id,
                                 "recording_id": task_info['recording_id'],
                                 "state": result.state, # e.g., 'SUCCESS', 'FAILURE', 'REVOKED'

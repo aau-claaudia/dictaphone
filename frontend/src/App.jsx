@@ -3,6 +3,7 @@ import {csrfToken} from "./csrf.js";
 import {MediaRecorder, register} from 'extendable-media-recorder';
 import {connect} from 'extendable-media-recorder-wav-encoder';
 import Settings from "./Settings.jsx";
+import Results from "./Results.jsx";
 import ErrorOverlay from "./Overlay.jsx";
 import { RecordingStatus } from './Constants.jsx';
 
@@ -38,7 +39,9 @@ const App = () => {
             size: null,
             finalization_status: null,
             transcribing: false,
-            transcriptionStartTime: null
+            transcriptionStartTime: null,
+            taskId: null,
+            transcriptionResults: null
         },
     ]);
     const sectionsRef = useRef(sections);
@@ -182,7 +185,7 @@ const App = () => {
                             console.warn("Warning, no chunk index data in acknowledgment.");
                         }
                         break;
-                    case "recording_complete":
+                    case "recording_complete": {
                         // recording finalization on server is complete
                         console.debug("Recording complete received from server.")
                         console.debug("File path:", data.path);
@@ -211,6 +214,7 @@ const App = () => {
                         chunkInventoryRef.current.clear();
                         // console.debug("Chunk inventory size after clearing:", chunkInventoryRef.current.size);
                         break;
+                    }
                     case "request_chunk":
                         // handle data request for missing chunk
                         console.debug("Chunk request received from server for chunk: ", data.chunk_index);
@@ -231,10 +235,45 @@ const App = () => {
                             console.warn("Warning, no chunk index data in chunk request.");
                         }
                         break;
-                    case "transcribed_file":
-                        // handle transcribed file links
-                        // TODO:
+                    case "transcription_started": {
+                        // update UI with status
+                        console.debug("Transcription started received from server.")
+                        console.debug("Recording ID:", data.recording_id);
+                        console.debug("File size:", data.file_size);
+                        console.debug("Task ID:", data.task_id);
+
+                        const updatedSections = [...sectionsRef.current];
+                        updatedSections.forEach(section => {
+                            if (section.recordingId === data.recording_id) {
+                                console.debug("Updating section with transcription status for recording ID:", data.recording_id);
+                                section.size = data.file_size;
+                                section.taskId = data.task_id;
+                                // TODO: show ETA / status
+                            }
+                        })
+                        setSections(updatedSections);
                         break;
+                    }
+                    case "transcription_completed": {
+                        // handle transcribed file links
+                        console.debug("Transcription results received from server.")
+                        console.debug("Recording ID:", data.recording_id);
+                        console.debug("Task ID:", data.task_id);
+                        //console.debug("Results:", data.results)
+
+                        const updatedSections = [...sectionsRef.current];
+                        updatedSections.forEach(section => {
+                            if (section.recordingId === data.recording_id) {
+                                console.debug("Updating section with transcription results for recording ID:", data.recording_id);
+                                section.transcribing = false;
+                                section.transcriptionStartTime = null;
+                                section.taskId = null
+                                section.transcriptionResults = data.results;
+                            }
+                        })
+                        setSections(updatedSections);
+                        break;
+                    }
                     default:
                         // handle unknown types
                         console.debug("Unknown message_type from backend (raw):", data);
@@ -364,7 +403,9 @@ const App = () => {
                     size: null,
                     finalization_status: null,
                     transcribing: false,
-                    transcriptionStartTime: null
+                    transcriptionStartTime: null,
+                    taskId: null,
+                    transcriptionResults: null
                 }
             ];
             setCurrentSection(newSections.length - 1); // Navigate to new section
@@ -399,12 +440,35 @@ const App = () => {
         })
         setSections(updatedSections);
         // send control message to backend
-
         sendControlMessage("start_transcription", {
             recordingId: recordingId,
             model: modelSize,
             language: language
         });
+    }
+
+    const cancelTranscription = (recordingId) => {
+        // update the section (start time and transcribing flag
+        const updatedSections = [...sectionsRef.current];
+        let taskId = null;
+        updatedSections.forEach(section => {
+            if (section.recordingId === recordingId) {
+                console.debug("Transcription cancelled, updating section with recording ID:", recordingId);
+                section.transcribing = false;
+                section.transcriptionStartTime = null;
+                taskId = section.taskId;
+                section.taskId = null;
+            }
+        })
+        setSections(updatedSections);
+        // send control message to backend
+        if (taskId) {
+            console.debug("Cancelling task with recordingId: " + recordingId + " and taskId: " + taskId);
+            sendControlMessage("cancel_transcription", {
+                recordingId: recordingId,
+                taskId: taskId,
+            });
+        }
     }
 
     const startRecording = async (index, updatedRecordingId) => {
@@ -656,9 +720,9 @@ const App = () => {
                                     disabled={recording || !sections[currentSection].audioUrl}>
                                 {sections[currentSection].transcribing ? 'In progress' : 'Transcribe recording'}
                             </button>
-                            <button className="transcribe-stop-button" onClick={() => console.debug("test")}
-                                    disabled={true}>
-                                Stop transcription
+                            <button className="transcribe-stop-button" onClick={() => cancelTranscription(sections[currentSection].recordingId)}
+                                    disabled={!sections[currentSection].transcribing || !sections[currentSection].taskId}>
+                                Cancel transcription
                             </button>
                             <button className="transcribe-button" onClick={showOrHideSettings}>
                                 {showSettings ? 'Hide settings' : 'Show settings'}
@@ -676,8 +740,11 @@ const App = () => {
                         </div>
                         <h3>Transcription Status</h3>
                         <p>Here the status will be shown.</p>
-                        <h3>Transcribed text</h3>
-                        <p>Here the transcribed text will be available.</p>
+                        {sections[currentSection].transcriptionResults && sections[currentSection].transcriptionResults.length > 0 && (
+                            <Results
+                                results={sections[currentSection].transcriptionResults}
+                            />
+                        )}
                     </div>
                     <div className="section-navigation"
                          style={{display: "flex", justifyContent: "center", marginTop: 20}}>

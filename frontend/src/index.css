@@ -306,3 +306,61 @@ h1 {
 .navigation-buttons:hover {
   cursor: pointer;
 }
+
+td.file-name {
+  max-width: 100px; /* Adjust the max-width as needed */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+td.file-name-merged {
+  min-width: 400px;
+  max-width: 450px; /* Adjust the max-width as needed */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Styles for the buttons */
+a.button {
+  display: inline-block;
+  padding: 8px 16px;
+  margin: 4px 2px;
+  font-size: 16px;
+  color: #000;
+  background-color: lightgreen;
+  border: none;
+  border-radius: 4px;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+a.button:hover {
+  background-color: green;
+}
+
+/* General styles for the table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 18px;
+  text-align: left;
+}
+
+th, td {
+  padding: 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+
+tr:hover {
+  background-color: #f1f1f1;
+}
