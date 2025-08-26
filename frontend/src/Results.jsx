@@ -3,7 +3,7 @@ import DownloadTableRows from "./TranscriptionFilesTable.jsx";
 import LogFilesDownload from "./LogFilesDownload.jsx";
 import DownloadLink from "./DownloadLink.jsx";
 
-const Results = ({ results }) => {
+const Results = ({ key, results }) => {
     // useMemo ensures this check only runs once per component render.
     const isFirefox = useMemo(() => {
         // Check if window.navigator is available to prevent errors during server-side rendering (SSR).

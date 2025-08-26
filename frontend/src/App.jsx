@@ -755,6 +755,7 @@ const App = () => {
                         {
                             sections[currentSection].transcriptionResults && sections[currentSection].transcriptionResults.length > 0 && (
                                 <Results
+                                    key={currentSection}
                                     results={sections[currentSection].transcriptionResults}
                                 />
                             )
