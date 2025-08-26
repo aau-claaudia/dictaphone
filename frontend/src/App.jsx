@@ -6,6 +6,7 @@ import Settings from "./Settings.jsx";
 import Results from "./Results.jsx";
 import ErrorOverlay from "./Overlay.jsx";
 import { RecordingStatus } from './Constants.jsx';
+import TranscriptionStatus from "./TranscriptionStatus.jsx";
 
 await register(await connect());
 
@@ -721,7 +722,7 @@ const App = () => {
                     <div>
                         <div style={{marginTop: 10}}>
                             <button className="transcribe-button" onClick={() => startTranscription(sections[currentSection].recordingId)}
-                                    disabled={recording || !sections[currentSection].audioUrl}>
+                                    disabled={recording || !sections[currentSection].audioUrl || sections[currentSection].transcribing}>
                                 {sections[currentSection].transcribing ? 'In progress' : 'Transcribe recording'}
                             </button>
                             <button className="transcribe-stop-button" onClick={() => cancelTranscription(sections[currentSection].recordingId)}
@@ -742,13 +743,22 @@ const App = () => {
                                 )
                             }
                         </div>
-                        <h3>Transcription Status</h3>
-                        <p>Here the status will be shown.</p>
-                        {sections[currentSection].transcriptionResults && sections[currentSection].transcriptionResults.length > 0 && (
-                            <Results
-                                results={sections[currentSection].transcriptionResults}
-                            />
-                        )}
+                        {
+                            sections[currentSection].transcribing && (
+                                <TranscriptionStatus
+                                    key={currentSection}
+                                    size={sections[currentSection].size}
+                                    startTime={sections[currentSection].transcriptionStartTime}
+                                />
+                            )
+                        }
+                        {
+                            sections[currentSection].transcriptionResults && sections[currentSection].transcriptionResults.length > 0 && (
+                                <Results
+                                    results={sections[currentSection].transcriptionResults}
+                                />
+                            )
+                        }
                     </div>
                     <div className="section-navigation"
                          style={{display: "flex", justifyContent: "center", marginTop: 20}}>

@@ -279,6 +279,12 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
             title = parts[1] if len(parts) > 1 else item_name
             log_path = os.path.join(recording_dir, "completion_log.txt")
             wav_path = os.path.join(recording_dir, "recording.wav")
+            # get transcription file links
+            transcription_dir = os.path.join(recording_dir, "TRANSCRIPTIONS")
+            results = None
+            if os.path.isdir(transcription_dir):
+                #logger.info("Loading transcription file links.")
+                results = prepare_results(transcription_dir)
 
             # Handle case where there is both a log and a wav file
             if os.path.isfile(log_path) and os.path.isfile(wav_path):
@@ -292,12 +298,6 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                         recording_id = int(lines[0].strip())
                         status_name = lines[1].strip()
                         status = RecordingStatus[status_name] # Convert string back to enum
-                        # get transcription file links
-                        transcription_dir = os.path.join(recording_dir, "TRANSCRIPTIONS")
-                        results = None
-                        if os.path.isdir(transcription_dir):
-                            logger.info("Loading transcription file links.")
-                            results = prepare_results(transcription_dir)
                         all_statuses.append({"recording_id": recording_id,
                                              "recording_path": recording_dir,
                                              "file_path": wav_path,
@@ -312,9 +312,11 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                     logger.info("Loading recording state for file with no completion log file")
                     recording_id = int(parts[0])
                     all_statuses.append({"recording_id": recording_id,
-                                         "path": wav_path,
+                                         "recording_path": recording_dir,
+                                         "file_path": wav_path,
                                          "status": RecordingStatus.INTERRUPTED_NOT_VERIFIED,
-                                         "title": title})
+                                         "title": title,
+                                         "results": results})
                 except (IndexError, TypeError, ValueError) as e:
                     logger.error(f"Could not parse recording ID from directory {recording_dir}: {e}")
             elif os.path.isfile(log_path):
