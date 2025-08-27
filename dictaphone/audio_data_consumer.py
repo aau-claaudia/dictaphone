@@ -72,7 +72,7 @@ class AudioChunkManager:
             path = 'RECORDINGS/' + recording_dir_name
             recording_path: str = os.path.join(settings.MEDIA_ROOT, path)
             os.makedirs(recording_path, exist_ok=True)
-            recording_file_path: str = os.path.join(recording_path, "recording.wav")
+            recording_file_path: str = os.path.join(recording_path, validate_linux_filename(title) + ".wav")
             self.recordings[self.active_recording_id]['recording_path'] = recording_path
             self.recordings[self.active_recording_id]['recording_file_path'] = recording_file_path
 
@@ -261,7 +261,7 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
     Returns:
         A list of dictionaries, where each dictionary contains:
         - 'recording_id': The recording id
-        - 'path': The full path to the 'recording.wav' file.
+        - 'path': The full path to the recorded file.
         - 'status': The RecordingStatus enum member (e.g., RecordingStatus.VERIFIED).
     """
     logger.info(f"Scanning for recordings in: {base_recordings_path}")
@@ -278,7 +278,7 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
             parts = item_name.split('_', 1)
             title = parts[1] if len(parts) > 1 else item_name
             log_path = os.path.join(recording_dir, "completion_log.txt")
-            wav_path = os.path.join(recording_dir, "recording.wav")
+            wav_path = os.path.join(recording_dir, title + ".wav")
             # get transcription file links
             transcription_dir = os.path.join(recording_dir, "TRANSCRIPTIONS")
             results = None
@@ -617,6 +617,47 @@ def prepare_results(transcription_dir: str) -> list[dict]:
             })
         results.sort(key=lambda x: x['file_name'])
     return results
+
+def validate_linux_filename(title: str) -> str:
+    """
+    Validates and sanitizes a string to be suitable as a filename on a Linux system.
+
+    This function performs two main actions:
+    1.  Validates the title against critical Linux filename restrictions.
+    2.  Sanitizes the title by replacing spaces with underscores.
+
+    A valid Linux filename:
+    - Must not contain the null character (\\0).
+    - Must not contain the path separator (/).
+    - Should not be exactly "." or "..", as these are reserved directory names.
+    - Must not be an empty string.
+
+    Args:
+        title: The string to validate as a potential filename.
+
+    Returns:
+        A sanitized version of the `title` string with spaces replaced by
+        underscores if it passes validation. Otherwise, returns the
+        generic string "recording".
+    """
+    if not isinstance(title, str):
+        # Handle cases where input is not a string, though type hints suggest it should be.
+        return "recording"
+
+    # 1. Check for empty string
+    if not title:
+        return "recording"
+
+    # 2. Check for forbidden characters: null character and path separator
+    if '\0' in title or '/' in title:
+        return "recording"
+
+    # 3. Check for reserved names (current and parent directory)
+    if title == "." or title == "..":
+        return "recording"
+
+    # If all checks pass, sanitize spaces and return the valid filename
+    return title.replace(' ', '_')
 
 def save_audio_data_for_test(audio_data, recording_id, chunk_index, includes_header, directory="dictaphone/resources/test_chunks"):
     """

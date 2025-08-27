@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 
-const TranscriptionStatus = ({ key, startTime, size }) => {
+const TranscriptionStatus = ({ startTime, size }) => {
     const [duration, setDuration] = useState(Date.now() - startTime);
 
     useEffect(() => {
