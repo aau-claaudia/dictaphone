@@ -19,8 +19,6 @@ const App = () => {
     const [language, setLanguage] = useState(getInitialString("language", "auto"))
     const [recording, setRecording] = useState(false);
     const chunkIndexRef = useRef(0);
-    const [finalizing, setFinalizing] = useState(false);
-    const finalizingRef = useRef(finalizing);
     const recordingRef = useRef(recording);
     const mediaRecorderRef = useRef(null);
     const mediaStreamRef = useRef(null);
@@ -31,6 +29,7 @@ const App = () => {
             title: "Recording 1",
             recordingId: null,
             isRecording: false,
+            isInitiating: false,
             audioLevel: 0,
             duration: 0,
             animationFrameId: null,
@@ -38,6 +37,7 @@ const App = () => {
             audioUrl: null,
             audioPath: null,
             size: null,
+            finalizing: false,
             finalization_status: null,
             transcribing: false,
             transcriptionStartTime: null,
@@ -50,8 +50,6 @@ const App = () => {
     const currentSectionRef = useRef(currentSection);
     const [socket, setSocket] = useState(null);
     const socketRef = useRef(null);
-    const [initiateRecordingFlag, setInitiateRecordingFlag] = useState(false);
-    const [recordingId, setRecordingId] = useState(null);
     const chunkInventoryRef = useRef(new Map());
     const [error, setError] = useState(null);
 
@@ -75,11 +73,6 @@ const App = () => {
             }
         };
     }, []);
-
-    // Keep the ref updated with the latest finalizing value
-    useEffect(() => {
-        finalizingRef.current = finalizing;
-    }, [finalizing]);
 
     useEffect(() => {
         recordingRef.current = recording;
@@ -139,6 +132,7 @@ const App = () => {
                                     title: item.title,
                                     recordingId: item.recording_id,
                                     isRecording: false,
+                                    isInitiating: false,
                                     audioLevel: 0,
                                     duration: 0,
                                     animationFrameId: null,
@@ -146,6 +140,7 @@ const App = () => {
                                     audioUrl: "http://localhost:8001" + item.recording_file_path,
                                     audioPath: null,
                                     size: null,
+                                    finalizing: false,
                                     finalization_status: item.status,
                                     transcribing: false,
                                     transcriptionStartTime: null,
@@ -164,7 +159,6 @@ const App = () => {
                         // handle start recording acknowledgment
                         if (data.recording_id) {
                             let updatedRecordingId = data.recording_id;
-                            setRecordingId(updatedRecordingId);
                             await startRecording(currentSectionRef.current, updatedRecordingId);
                         } else {
                             console.debug("No recording id returned.");
@@ -206,14 +200,12 @@ const App = () => {
                                 console.debug("Updating section with recording ID:", data.recording_id);
                                 section.audioUrl = "http://localhost:8001" + data.path;
                                 section.finalization_status = data.completion_status;
-                                section.size = data.size
+                                section.size = data.size;
+                                section.finalizing = false;
                             }
                         })
                         setSections(updatedSections);
 
-                        // update state to allow new recording
-                        setRecordingId(null);
-                        setFinalizing(false);
                         // reset the chunk inventory Map
                         // console.debug("Chunk inventory size before clearing:", chunkInventoryRef.current.size);
                         chunkInventoryRef.current.clear();
@@ -399,6 +391,7 @@ const App = () => {
                     title: `Recording ${prevSections.length + 1}`,
                     recordingId: null,
                     isRecording: false,
+                    isInitiating: false,
                     audioLevel: 0,
                     duration: 0,
                     animationFrameId: null,
@@ -406,6 +399,7 @@ const App = () => {
                     audioUrl: null,
                     audioPath: null,
                     size: null,
+                    finalizing: false,
                     finalization_status: null,
                     transcribing: false,
                     transcriptionStartTime: null,
@@ -428,8 +422,10 @@ const App = () => {
         inputElement.style.width = `${Math.max(inputElement.value.length * 0.6, 10)}em`;
     };
 
-    const initiateRecording = () => {
-        setInitiateRecordingFlag(true);
+    const initiateRecording = (index) => {
+        const updatedSections = [...sectionsRef.current];
+        updatedSections[index].isInitiating = true;
+        setSections(updatedSections);
         sendControlMessage("start_recording", sections[currentSection].title);
     }
 
@@ -483,6 +479,7 @@ const App = () => {
         updatedSections[index].startTime = Date.now(); // Record the start time
         // Lock the title so that the file name can be used for file processing with backend
         updatedSections[index].titleLocked = true;
+        updatedSections[index].isInitiating = false;
         setSections(updatedSections);
 
         // Request access to the microphone
@@ -501,7 +498,6 @@ const App = () => {
         analyserRef.current = analyserInstance;
         const mediaRecorderInstance = new MediaRecorder(streamInstance,{ mimeType: 'audio/wav' });
         mediaRecorderRef.current = mediaRecorderInstance;
-        setInitiateRecordingFlag(false);
         setRecording(true);
 
         chunkIndexRef.current = 0; // Reset chunk index for new recording
@@ -560,9 +556,9 @@ const App = () => {
         const updatedSections = [...sectionsRef.current];
         updatedSections[index].isRecording = false;
         updatedSections[index].audioLevel = 0;
+        updatedSections[index].finalizing = true;
         setSections(updatedSections);
         setRecording(false);
-        setFinalizing(true);
         if (updatedSections[index].animationFrameId) {
             console.debug("Stopping the animation frame...");
             cancelAnimationFrame(updatedSections[index].animationFrameId);
@@ -580,7 +576,6 @@ const App = () => {
 
     const stopRecordingOnDisconnect = () => {
         setRecording(false);
-        setFinalizing(false);
         // clear the chunk inventory data
         chunkInventoryRef.current.clear();
         // update all sections
@@ -664,12 +659,12 @@ const App = () => {
                     </div>
                     <div className="recording-content">
                         <button className="transcribe-button" onClick={() => initiateRecording(currentSection)}
-                                disabled={recording || sections[currentSection].audioUrl || initiateRecordingFlag}>
-                            {recording ? (initiateRecordingFlag ? 'Initiating' : 'Recording') : 'Start recording'}
+                                disabled={recording || sections[currentSection].audioUrl || sections[currentSection].isInitiating || sections[currentSection].finalizing}>
+                            {recording ? (sections[currentSection].isInitiating ? 'Initiating' : 'Recording') : 'Start recording'}
                         </button>
                         <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection, true)}
                                 disabled={!recording}>
-                            Stop recording
+                            {sections[currentSection].finalizing ? 'Verifying recording' : 'Stop recording'}
                         </button>
                         {
                             !sections[currentSection].audioUrl && (

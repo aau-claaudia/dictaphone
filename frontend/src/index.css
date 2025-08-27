@@ -149,6 +149,7 @@ h1 {
   text-decoration: none; /* Remove underline from links */
   cursor: pointer; /* Pointer cursor on hover */
   transition: background-color 0.3s ease, transform 0.3s ease; /* Smooth transitions */
+  min-width: 20%;
 }
 
 .transcribe-stop-button:hover {
@@ -191,6 +192,7 @@ h1 {
   text-decoration: none; /* Remove underline from links */
   cursor: pointer; /* Pointer cursor on hover */
   transition: background-color 0.3s ease, transform 0.3s ease; /* Smooth transitions */
+  min-width: 20%;
 }
 
 .transcribe-button:hover {
