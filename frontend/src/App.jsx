@@ -671,11 +671,6 @@ const App = () => {
                                 disabled={!recording}>
                             Stop recording
                         </button>
-                        <button className="transcribe-stop-button"
-                                onClick={() => console.debug("Calling reset recording.")}
-                                disabled={recording || !sections[currentSection].audioUrl}>
-                            Delete recording
-                        </button>
                         {
                             !sections[currentSection].audioUrl && (
                                 <div className="audio-level-container">
