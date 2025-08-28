@@ -56,7 +56,7 @@ const Results = ({ results }) => {
                             <DownloadLink
                                 linkText={"Download zip file."}
                                 isFirefox={isFirefox}
-                                downloadUrl={"http://localhost:8001" + zipFile.file_url}
+                                downloadUrl={zipFile.file_url}
                             />
                         </div>
                     </div>

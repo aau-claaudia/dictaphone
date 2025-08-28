@@ -6,10 +6,16 @@ export default defineConfig({
   server: {
     host: true, // make development server accessible from the wireless network, for testing on mobile device
     proxy: {
-      '/todo-makethis-work': {
-        target: 'http://localhost:8000', // Django backend
+      // Proxy WebSocket connections to the Daphne server
+      '/ws': {
+        target: 'ws://localhost:8001',
+        ws: true, // This is crucial for WebSocket proxying
+      },
+      // Proxy media file requests to the Django/Daphne server.
+      // Match any URL that contains '/media/RECORDINGS/'
+      '^.*(/media/RECORDINGS/.*)$': {
+        target: 'http://localhost:8001',
         changeOrigin: true,
-        secure: false, // Set to true if using HTTPS
       },
     },
   },

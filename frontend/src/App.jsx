@@ -1,11 +1,10 @@
 import React, {useEffect, useRef, useState} from "react";
-import {csrfToken} from "./csrf.js";
 import {MediaRecorder, register} from 'extendable-media-recorder';
 import {connect} from 'extendable-media-recorder-wav-encoder';
 import Settings from "./Settings.jsx";
 import Results from "./Results.jsx";
 import ErrorOverlay from "./Overlay.jsx";
-import { RecordingStatus } from './Constants.jsx';
+import {RecordingStatus} from './Constants.jsx';
 import TranscriptionStatus from "./TranscriptionStatus.jsx";
 
 await register(await connect());
@@ -48,21 +47,20 @@ const App = () => {
     const sectionsRef = useRef(sections);
     const [currentSection, setCurrentSection] = useState(0);
     const currentSectionRef = useRef(currentSection);
-    const [socket, setSocket] = useState(null);
     const socketRef = useRef(null);
     const chunkInventoryRef = useRef(new Map());
     const [error, setError] = useState(null);
 
+    // Determine protocol (ws or wss) based on the page's protocol (http or https)
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+
     useEffect(() => {
-        // TODO: wss for test and production
-        const ws = new WebSocket("ws://localhost:8001/ws/dictaphone/data/");
-        //const ws = new WebSocket("wss://localhost:8001/ws/dictaphone/data/");
+        const ws = new WebSocket(`${protocol}://${window.location.host}/ws/dictaphone/data/`);
         ws.onopen = () => initializeState();
         ws.onclose = () => handleDisconnect();
         ws.onerror = (e) => handleWebSocketError(e);
         ws.onmessage = (e) => receiveMessage(e);
         socketRef.current = ws;
-        setSocket(ws);
 
         // Clean up on unmount
         return () => {
@@ -137,7 +135,7 @@ const App = () => {
                                     duration: 0,
                                     animationFrameId: null,
                                     titleLocked: true,
-                                    audioUrl: "http://localhost:8001" + item.recording_file_path,
+                                    audioUrl: item.recording_file_path,
                                     audioPath: null,
                                     size: null,
                                     finalizing: false,
@@ -193,12 +191,11 @@ const App = () => {
                         console.debug("Completion status:", data.completion_status);
 
                         const updatedSections = [...sectionsRef.current];
-                        // TODO: use relative link and fix react development server proxy to use localhost:8001
 
                         updatedSections.forEach(section => {
                             if (section.recordingId === data.recording_id) {
                                 console.debug("Updating section with recording ID:", data.recording_id);
-                                section.audioUrl = "http://localhost:8001" + data.path;
+                                section.audioUrl = data.path;
                                 section.finalization_status = data.completion_status;
                                 section.size = data.size;
                                 section.finalizing = false;
@@ -245,7 +242,6 @@ const App = () => {
                                 console.debug("Updating section with transcription status for recording ID:", data.recording_id);
                                 section.size = data.file_size;
                                 section.taskId = data.task_id;
-                                // TODO: show ETA / status
                             }
                         })
                         setSections(updatedSections);
@@ -544,9 +540,7 @@ const App = () => {
             // update recording duration
             updatedSections[index].duration = Math.floor((Date.now() - updatedSections[index].startTime) / 1000);
             setSections([...updatedSections]);
-            let animationFrameRequestId = requestAnimationFrame(checkAudioLevel);
-            //console.debug("AnimationFrameRequestId: " + animationFrameRequestId);
-            updatedSections[index].animationFrameId = animationFrameRequestId;
+            updatedSections[index].animationFrameId = requestAnimationFrame(checkAudioLevel);
         }
         checkAudioLevel();
         mediaRecorderInstance.start(2000) // data chunk size is 2 seconds of recording

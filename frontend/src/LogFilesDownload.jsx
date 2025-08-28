@@ -16,7 +16,7 @@ const LogFilesDownload = ({ logFiles, isFirefox }) => {
                     return (
                         <div key={index}>
                             <iframe id={iframeId} name={iframeId} style={{ display: "none" }} title="Download helper" />
-                            <a href={"http://localhost:8001" + result.file_url}
+                            <a href={result.file_url}
                                target={iframeId}
                                download>
                                 {result.file_name}
@@ -33,7 +33,7 @@ const LogFilesDownload = ({ logFiles, isFirefox }) => {
         <>
             {logFiles.map((result, index) => (
                 <div key={index}>
-                    <a href={"http://localhost:8001" + result.file_url} rel="noreferrer" download>
+                    <a href={result.file_url} rel="noreferrer" download>
                         {result.file_name}
                     </a>
                 </div>

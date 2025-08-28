@@ -1,7 +1,6 @@
 import os
 from django.http import Http404
 from django.http import HttpResponse
-from django.conf import settings
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +14,7 @@ def serve_file(request, path):
     #logger.info("Executing the serve_file view")
     #logger.info("Request path: " + request.path)
     # Determine the base directory based on the URL prefix
-    # TODO: redo serve file path logic
+    # TODO: redo serve file path logic for UCloud setup
     if request.path.startswith('/work/'):
         base_dir = '/work'  # the files are saved here on UCloud
     elif 'media/RECORDINGS' in request.path:
