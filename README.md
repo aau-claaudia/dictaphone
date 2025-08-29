@@ -1,4 +1,12 @@
 # Dictaphone
+The dictaphone application is designed to continuously transmit recording data through a customized WebSocket implementation. 
+This ensures that there will not be any cached sensitive data in the browser, but only momentarily in the Javascript memory.
+Reliable Data Transfer has been implemented by use of acknowledgment of data packets and package request/re-send functionality. 
+Also, a custom header is prefixed on the client side for binary data packets, and this header is stripped on the server side to ensure package order integrity. 
+Transcription of recordings is done using the Transcriber project. Transcriptions are started as Celery tasks. 
+
+## Sequence diagram - user and component interaction
+![Sequence Diagram](documentation/architecture.svg)
 
 ## Python packages needed
 ``` bash
@@ -9,7 +17,7 @@ pip install django django-cors-headers django-rest-framework celery redis channe
 npm install extendable-media-recorder extendable-media-recorder-wav-encoder
 ```
 
-## Start development server
+## Start daphne server for serving WebSocket (activate Python env)
 ``` bash
 daphne -p 8001 backend.asgi:application
 ```
@@ -40,7 +48,7 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-## Start Celery worker and configure to run one task at a time from the queue
+## Start Celery worker and configure to run one task at a time from the queue (activate Python env)
 ``` bash
 (.venv) nikko@nikkoAtClaaudia:~/projects/dictaphone$ python -m celery -A backend worker -l info --concurrency=1
 ```
