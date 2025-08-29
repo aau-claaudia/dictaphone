@@ -305,7 +305,7 @@ const App = () => {
             case RecordingStatus.DATA_LOSS:
                 return 'Error: Data loss detected. The recording is incomplete.';
             case RecordingStatus.INTERRUPTED_NOT_VERIFIED:
-                return 'Error: Recording was interrupted and could not be verified.';
+                return 'Recording was interrupted and could not be verified.';
             default:
                 return 'Unknown status.';
         }

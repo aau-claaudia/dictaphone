@@ -12,9 +12,17 @@ Transcription of recordings is done using the Transcriber project. Transcription
 ``` bash
 pip install django django-cors-headers django-rest-framework celery redis channels_redis python-dotenv channels daphne pytest pytest-asyncio
 ```
+
 ## npm packages needed
 ``` bash
 npm install extendable-media-recorder extendable-media-recorder-wav-encoder
+```
+
+## Prepare Django backend.
+Create an environment file for test in the "dictaphone" project directory called ".env" with the following content
+```
+SECRET_KEY='django-insecure-1t2i)9v^1^n$4@_w72wlb$71r)=o1(kg2lnma-!fni9*ei#y75'
+DEBUG=True
 ```
 
 ## Start daphne server for serving WebSocket (activate Python env)
