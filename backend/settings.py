@@ -22,6 +22,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = os.environ.get('DEBUG') == 'True'
+DJANGO_LOG_HANDLER = os.environ.get('DJANGO_LOG_HANDLER', 'console')
+DJANGO_LOG_FILE = os.environ.get('DJANGO_LOG_FILE', '/var/log/django/app.log')
 
 ALLOWED_HOSTS = ['*']
 
@@ -140,16 +142,8 @@ CORS_ALLOWED_ORIGINS = [
     'https://localhost:8000', # Django server
     'https://localhost:8080', # React Nginx server
 ]
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',  # Vite dev server
-    'http://localhost:8000', # Django server
-]
-CORS_ORIGINS_WHITELIST = [
-    'http://localhost:5173',  # Vite dev server
-    'http://localhost:8000', # Django server
-]
 
-SESSION_COOKIE_HTTPONLY = False
+SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'None'  # Adjust as needed (e.g., 'Strict' or 'None' for cross-origin)
 CSRF_COOKIE_SAMESITE = 'None'
 CORS_ALLOW_CREDENTIALS = True
@@ -184,26 +178,37 @@ LOGGING = {
     },
     "handlers": {
         "console": {
+            "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
+        "file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "verbose",
+            # using environment variable for the log file path, with a default.
+            "filename": DJANGO_LOG_FILE,
+            "maxBytes": 1024 * 1024 * 20,  # 20 MB
+            "backupCount": 5,
+        },
     },
     "loggers": {
-        # This is the key part: it catches logs from YOUR app code.
         "root": {
-            "handlers": ["console"],
-            # Use DEBUG to see everything during development.
+            "handlers": [DJANGO_LOG_HANDLER],
             "level": "INFO",
         },
-        # This logger handles messages from Django's request/response cycle.
-        "django.server": {
-            "handlers": ["console"],
-            "level": "DEBUG",
+        "django": {
+            "handlers": [DJANGO_LOG_HANDLER],
+            "level": "INFO",
             "propagate": False,
         },
-        # This logger handles messages from Daphne.
-        "daphne.server": {
-            "handlers": ["console"],
+        "django.server": {
+            "handlers": [DJANGO_LOG_HANDLER],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "daphne": {
+            "handlers": [DJANGO_LOG_HANDLER],
             "level": "INFO",
             "propagate": False,
         },

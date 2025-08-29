@@ -8,13 +8,13 @@ export default defineConfig({
     proxy: {
       // Proxy WebSocket connections to the Daphne server
       '/ws': {
-        target: 'ws://localhost:8001',
+        target: 'ws://localhost:8000',
         ws: true, // This is crucial for WebSocket proxying
       },
       // Proxy media file requests to the Django/Daphne server.
       // Match any URL that contains '/media/RECORDINGS/'
       '^.*(/media/RECORDINGS/.*)$': {
-        target: 'http://localhost:8001',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },

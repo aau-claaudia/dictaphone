@@ -19,15 +19,18 @@ npm install extendable-media-recorder extendable-media-recorder-wav-encoder
 ```
 
 ## Prepare Django backend.
-Create an environment file for test in the "dictaphone" project directory called ".env" with the following content
+Create an environment file for test in the "dictaphone" project directory called ".env" with the following content (modify last line to fit your project directory)
 ```
 SECRET_KEY='django-insecure-1t2i)9v^1^n$4@_w72wlb$71r)=o1(kg2lnma-!fni9*ei#y75'
 DEBUG=True
+DJANGO_LOG_HANDLER='console'
+DJANGO_LOG_LEVEL='DEBUG'
+DJANGO_LOG_FILE='/home/nikko/projects/dictaphone/django.log'
 ```
 
 ## Start daphne server for serving WebSocket (activate Python env)
 ``` bash
-daphne -p 8001 backend.asgi:application
+daphne -p 8000 backend.asgi:application
 ```
 
 ## Start development react frontend
