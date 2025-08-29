@@ -294,17 +294,21 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                         if len(lines) < 2:
                             logger.warning(f"Malformed completion log (too short): {log_path}")
                             continue
-
-                        recording_id = int(lines[0].strip())
-                        status_name = lines[1].strip()
-                        status = RecordingStatus[status_name] # Convert string back to enum
+                        log_data = {}
+                        for line in lines:
+                            if ":" in line:
+                                key, value = line.split(":", 1)
+                                log_data[key.strip()] = value.strip()
+                        recording_id = int(log_data["Recording ID"])
+                        status_name = log_data["Status"]
+                        status = RecordingStatus[status_name]  # Convert string back to enum
                         all_statuses.append({"recording_id": recording_id,
                                              "recording_path": recording_dir,
                                              "file_path": wav_path,
                                              "status": status,
                                              "title": title,
                                              "results": results})
-                except (IndexError, TypeError, ValueError) as e:
+                except (IndexError, TypeError, ValueError, KeyError) as e:
                     logger.error(f"Could not parse completion log {log_path}: {e}")
             elif os.path.isfile(wav_path):
                 try:
@@ -348,7 +352,6 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         self.monitor_task = None
 
     async def connect(self):
-        # TODO: we need to test that Websocket authentication is not needed, e.g. only the user starting the job can connect to the Websocket
         await self.accept()
 
     async def disconnect(self, close_code):
@@ -480,9 +483,9 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
 
                 os.makedirs(recording_dir, exist_ok=True)
                 with open(log_path, "w") as f:
-                    f.write(f"{recording_id}\n")
-                    f.write(f"{status.name}\n")
-                    f.write(f"{timestamp_finalized}\n")
+                    f.write(f"Recording ID: {recording_id}\n")
+                    f.write(f"Status: {status.name}\n")
+                    f.write(f"Completion time: {timestamp_finalized}\n")
                 logger.info(f"Wrote completion log for recording {recording_id} with status {status.name}")
             except Exception as e:
                 logger.error(f"Failed to write completion log for recording {recording_id}: {e}")
@@ -543,6 +546,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         recording_dir_path = self.chunk_manager.get_recording_dir_path(recording_id)
         recording_file_path = self.chunk_manager.get_file_path(recording_id)
         # Get the file size
+        size = None
         try:
             size = os.path.getsize(recording_file_path)
         except FileNotFoundError:

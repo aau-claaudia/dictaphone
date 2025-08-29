@@ -45,7 +45,7 @@ const DownloadTableRows = ({ groupedFiles, classNameForStyling, isFirefox }) => 
                             return (
                                 <td key={subIndex}>
                                     <iframe id={iframeId} name={iframeId} style={{ display: "none" }} title="Download helper" />
-                                    <a href={"http://localhost:8001" + result.file_url}
+                                    <a href={result.file_url}
                                        title={getTitleForFileExtension(getFileExtension(result.file_name))}
                                        target={iframeId}
                                        className="button"
@@ -69,7 +69,7 @@ const DownloadTableRows = ({ groupedFiles, classNameForStyling, isFirefox }) => 
                     <td className={classNameForStyling} title={key}>{key}</td>
                     {groupedFiles[key].map((result, subIndex) => (
                         <td key={subIndex}>
-                            <a href={"http://localhost:8001" + result.file_url}
+                            <a href={result.file_url}
                                title={getTitleForFileExtension(getFileExtension(result.file_name))}
                                rel="noreferrer"
                                className="button"
