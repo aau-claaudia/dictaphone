@@ -57,7 +57,7 @@ ROOT_URLCONF = 'backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR],
+        "DIRS": [os.path.join(BASE_DIR, "frontend", "build")],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -122,8 +122,6 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 
 MEDIA_ROOT = BASE_DIR / 'media'
-
-UCLOUD_DIRECTORY = BASE_DIR / 'ucloud'
 
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50000000000
 

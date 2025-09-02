@@ -19,4 +19,13 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // This is the folder where the build will be generated
+    outDir: 'build',
+    // This is the folder where the assets will be generated
+    assetsDir: 'static',
+    // This is the base url of the assets
+    // It should match Django's STATIC_URL
+    base: '/static/',
+  }
 });

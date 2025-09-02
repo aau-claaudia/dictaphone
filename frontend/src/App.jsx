@@ -7,7 +7,7 @@ import ErrorOverlay from "./Overlay.jsx";
 import {RecordingStatus} from './Constants.jsx';
 import TranscriptionStatus from "./TranscriptionStatus.jsx";
 
-await register(await connect());
+let isWavLibraryRegistered = false;
 
 const App = () => {
     const getInitialString = (keyname, value) => {
@@ -70,6 +70,18 @@ const App = () => {
                 ws.close();
             }
         };
+    }, []);
+
+    useEffect(() => {
+        // Ensure that the module is only registered one time
+        if (!isWavLibraryRegistered) {
+            const registerWavLibrary = async () => {
+                await register(await connect());
+            };
+            registerWavLibrary().catch(console.error);
+            // Set the flag so this block doesn't run again
+            isWavLibraryRegistered = true;
+        }
     }, []);
 
     useEffect(() => {
