@@ -1,9 +1,10 @@
-import React, { useMemo } from 'react';
-import DownloadTableRows from "./TranscriptionFilesTable.jsx";
+import React, {useMemo, useState} from 'react';
+import TranscriptionFilesTable from "./TranscriptionFilesTable.jsx";
 import LogFilesDownload from "./LogFilesDownload.jsx";
 import DownloadLink from "./DownloadLink.jsx";
 
 const Results = ({ results }) => {
+    const [showFiles, setShowFiles] = useState(false);
     // useMemo ensures this check only runs once per component render.
     const isFirefox = useMemo(() => {
         // Check if window.navigator is available to prevent errors during server-side rendering (SSR).
@@ -46,6 +47,7 @@ const Results = ({ results }) => {
             <p>
                 The download of transcriptions is possible as a single file or
                 as a zip-file containing all transcribed files.
+                If you are working with sensitive data remember to only download files if your device is secured for this usage.
             </p>
             <div>
                 {zipFile && (
@@ -62,37 +64,19 @@ const Results = ({ results }) => {
                     </div>
                 )}
                 <h3>Standard files</h3>
-                <table>
-                    <thead>
-                    <tr>
-                        <th>File</th>
-                        <th colSpan={maxFilesInGroup}>Extensions</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <DownloadTableRows
-                        groupedFiles={groupedFiles}
-                        classNameForStyling={"file-name"}
-                        isFirefox={isFirefox}
-                    />
-                    </tbody>
-                </table>
+                <TranscriptionFilesTable
+                    groupedFiles={groupedFiles}
+                    isFirefox={isFirefox}
+                    maxFilesInGroup={maxFilesInGroup}
+                    fileNameStyle={"file-name"}
+                />
                 <h3>Merged speaker format</h3>
-                <table>
-                    <thead>
-                    <tr>
-                        <th>File</th>
-                        <th colSpan={maxFilesInGroup}>Extensions</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <DownloadTableRows
-                        groupedFiles={groupedFilesMergedFormat}
-                        classNameForStyling={"file-name-merged"}
-                        isFirefox={isFirefox}
-                    />
-                    </tbody>
-                </table>
+                <TranscriptionFilesTable
+                    groupedFiles={groupedFilesMergedFormat}
+                    isFirefox={isFirefox}
+                    maxFilesInGroup={maxFilesInGroup}
+                    fileNameStyle={"file-name-merged"}
+                />
             </div>
             <div>
                 <h3>Log files</h3>

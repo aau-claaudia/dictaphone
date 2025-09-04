@@ -106,9 +106,11 @@ h1 {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
+  position: relative;
 }
 
 .add-section-button {
+  position: absolute;
   background-color: darkgreen;
   bottom: 2%;
   right: 2%;
@@ -309,21 +311,6 @@ h1 {
   cursor: pointer;
 }
 
-td.file-name {
-  max-width: 100px; /* Adjust the max-width as needed */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-td.file-name-merged {
-  min-width: 400px;
-  max-width: 450px; /* Adjust the max-width as needed */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 /* Styles for the buttons */
 a.button {
   display: inline-block;
@@ -342,29 +329,6 @@ a.button {
 
 a.button:hover {
   background-color: green;
-}
-
-/* General styles for the table */
-table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 20px 0;
-  font-size: 18px;
-  text-align: left;
-}
-
-th, td {
-  padding: 12px;
-  border-bottom: 1px solid #ddd;
-}
-
-th {
-  background-color: #f4f4f4;
-  color: #333;
-}
-
-tr:hover {
-  background-color: #f1f1f1;
 }
 
 .progress-bar {
@@ -388,4 +352,103 @@ tr:hover {
 .progress-bar::-moz-progress-bar {
   background-color: #4caf50;
   border-radius: 5px;
+}
+
+.centered-image {
+  max-width: 40%;
+  height: auto;
+}
+
+.title-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 2%;
+  margin-bottom: 2%;
+}
+
+/* --- Base Styles --- */
+.transcription-files-container .button {
+  /* Add your button styles here */
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  text-decoration: none;
+  background-color: lightgreen;
+  display: inline-block;
+}
+
+/* Hide mobile list on larger screens */
+.transcription-files-list {
+  display: none;
+}
+
+/* --- Desktop Table Styles --- */
+.transcription-files-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 20px 0;
+  font-size: 18px;
+  text-align: left;
+}
+
+.transcription-files-table th,
+.transcription-files-table td {
+  padding: 12px;
+  border-bottom: 1px solid #ddd;
+}
+
+.transcription-files-table th {
+  background-color: #f4f4f4;
+  color: #333;
+}
+
+.transcription-files-table .file-name {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transcription-files-table .file-name-merged {
+  min-width: 400px;
+  max-width: 450px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --- Mobile Styles (for screens 600px or less) --- */
+@media (max-width: 600px) {
+  /* Hide the table on small screens */
+  .transcription-files-table {
+    display: none;
+  }
+
+  /* Show the list and style it as cards */
+  .transcription-files-list {
+    display: block;
+    max-width: 300px; /* As you requested */
+    margin: 0 auto; /* Center the container */
+  }
+
+  .file-card {
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 16px;
+  }
+
+  .file-card-name {
+    font-weight: bold;
+    margin-bottom: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-card-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px; /* Space between download buttons */
+  }
 }

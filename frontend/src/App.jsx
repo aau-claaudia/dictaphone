@@ -6,6 +6,7 @@ import Results from "./Results.jsx";
 import ErrorOverlay from "./Overlay.jsx";
 import {RecordingStatus} from './Constants.jsx';
 import TranscriptionStatus from "./TranscriptionStatus.jsx";
+import dictaphoneImage from "./assets/dictaphone_logo_690x386.png";
 
 let isWavLibraryRegistered = false;
 
@@ -648,7 +649,9 @@ const App = () => {
                 error={error}
                 onRefresh={handleRefresh}
             />
-            <h1>Dictaphone prototype</h1>
+            <div className="title-container">
+                <img src={dictaphoneImage} alt="Dictaphone" className="centered-image"/>
+            </div>
             <div>
                 <div className="recording-section">
                     <div className="recording-header">
@@ -717,11 +720,13 @@ const App = () => {
                     </div>
                     <div>
                         <div style={{marginTop: 10}}>
-                            <button className="transcribe-button" onClick={() => startTranscription(sections[currentSection].recordingId)}
+                            <button className="transcribe-button"
+                                    onClick={() => startTranscription(sections[currentSection].recordingId)}
                                     disabled={recording || !sections[currentSection].audioUrl || sections[currentSection].transcribing}>
                                 {sections[currentSection].transcribing ? 'In progress' : 'Transcribe recording'}
                             </button>
-                            <button className="transcribe-stop-button" onClick={() => cancelTranscription(sections[currentSection].recordingId)}
+                            <button className="transcribe-stop-button"
+                                    onClick={() => cancelTranscription(sections[currentSection].recordingId)}
                                     disabled={!sections[currentSection].transcribing || !sections[currentSection].taskId}>
                                 Cancel transcription
                             </button>

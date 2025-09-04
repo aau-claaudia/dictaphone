@@ -10,12 +10,17 @@ Transcription of recordings is done using the Transcriber project. Transcription
 
 ## Python packages needed
 ``` bash
-pip install django django-cors-headers django-rest-framework celery redis channels_redis python-dotenv channels daphne pytest pytest-asyncio
+pip install django django-cors-headers django-rest-framework celery redis channels-redis python-dotenv channels daphne pytest pytest-asyncio
 ```
 
 ## npm packages needed
 ``` bash
 npm install extendable-media-recorder extendable-media-recorder-wav-encoder
+```
+
+## npm package for testing the app on mobile phones (https needed)
+```
+npm install @vitejs/plugin-basic-ssl --save-dev
 ```
 
 ## Prepare Django backend.
