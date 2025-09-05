@@ -7,6 +7,7 @@ import ErrorOverlay from "./Overlay.jsx";
 import {RecordingStatus} from './Constants.jsx';
 import TranscriptionStatus from "./TranscriptionStatus.jsx";
 import dictaphoneImage from "./assets/dictaphone_logo_690x386.png";
+import RecordingSettings from "./RecordingSettings.jsx";
 
 let isWavLibraryRegistered = false;
 
@@ -15,14 +16,20 @@ const App = () => {
         const dataFromSession = sessionStorage.getItem(keyname);
         return dataFromSession ? JSON.parse(dataFromSession) : value;
     }
+    const getInitialInteger = (keyname, value) => {
+        const dataFromSession = sessionStorage.getItem(keyname);
+        return dataFromSession ? parseInt(JSON.parse(dataFromSession), 10) : parseInt(value, 10);
+    }
     const [modelSize, setModelSize] = useState(getInitialString("modelSize", "large-v3"))
     const [language, setLanguage] = useState(getInitialString("language", "auto"))
+    const micBoostLevel = useRef(getInitialInteger("micBoostLevel", 1))
     const [recording, setRecording] = useState(false);
     const chunkIndexRef = useRef(0);
     const recordingRef = useRef(recording);
     const mediaRecorderRef = useRef(null);
     const mediaStreamRef = useRef(null);
     const analyserRef = useRef(null);
+    const [showRecordingSettings, setShowRecordingSettings] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [sections, setSections] = useState([
         {
@@ -500,12 +507,19 @@ const App = () => {
         });
         mediaStreamRef.current = streamInstance;
         const audioContext = new AudioContext();
-        const source = audioContext.createMediaStreamSource(streamInstance);
+
+        const defaultSource = audioContext.createMediaStreamSource(streamInstance);
+        // creating a gain node to set the mic level, amplify according to setting
+        const gainNode = audioContext.createGain();
+        const destination = audioContext.createMediaStreamDestination();
+        gainNode.gain.value = micBoostLevel.current;
+        defaultSource.connect(gainNode);
         const analyserInstance = audioContext.createAnalyser();
         analyserInstance.fftSize = 256;
-        source.connect(analyserInstance);
+        gainNode.connect(analyserInstance);
+        gainNode.connect(destination);
         analyserRef.current = analyserInstance;
-        const mediaRecorderInstance = new MediaRecorder(streamInstance,{ mimeType: 'audio/wav' });
+        const mediaRecorderInstance = new MediaRecorder(destination.stream,{ mimeType: 'audio/wav' });
         mediaRecorderRef.current = mediaRecorderInstance;
         setRecording(true);
 
@@ -635,12 +649,22 @@ const App = () => {
         setShowSettings(!showSettings);
     }
 
+    // Function for showing or hiding the recording settings
+    const showOrHideRecordingSettings = () => {
+        setShowRecordingSettings(!showRecordingSettings);
+    }
+
     const onUpdateModel = (modelSize) => {
         setModelSize(modelSize)
     }
 
     const onUpdateLanguage = (language) => {
         setLanguage(language)
+    }
+
+    const onUpdateBoost = (boost) => {
+        micBoostLevel.current = parseInt(boost, 10);
+        sessionStorage.setItem("micBoostLevel", JSON.stringify(micBoostLevel.current))
     }
 
     return (
@@ -675,6 +699,17 @@ const App = () => {
                                 disabled={!recording}>
                             {sections[currentSection].finalizing ? 'Verifying recording' : 'Stop recording'}
                         </button>
+                        <button className="transcribe-button" onClick={showOrHideRecordingSettings}>
+                            {showRecordingSettings ? 'Hide settings' : 'Show settings'}
+                        </button>
+                        {
+                            showRecordingSettings && (
+                                <RecordingSettings
+                                    currentBoost={micBoostLevel.current}
+                                    onUpdateBoost={onUpdateBoost}
+                                />
+                            )
+                        }
                         {
                             !sections[currentSection].audioUrl && (
                                 <div className="audio-level-container">

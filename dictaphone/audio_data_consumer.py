@@ -340,7 +340,7 @@ def clean_dir(path):
     try:
         # handle case with empty directory, exceptional error, cleanup directory
         os.removedirs(path)
-    except FileNotFoundError as e:
+    except OSError as e:
         logger.error("Directory could not be cleaned.", e)
 
 
