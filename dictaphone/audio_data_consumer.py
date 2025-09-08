@@ -28,9 +28,14 @@ class AudioChunkManager:
         self.recordings = {}
         self.lock = asyncio.Lock() # Lock for async operations
         if load_data_from_server:
+            # not running in test mode
+            self.recording_base_path = get_recording_base_path()
+            self.initialize_recording_data(load_all_recordings_status(self.recording_base_path))
+        else:
+            # running integration test
             recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
             os.makedirs(recording_path, exist_ok=True)
-            self.initialize_recording_data(load_all_recordings_status(recording_path))
+            self.recording_base_path = recording_path
 
     def initialize_recording_data(self, data: list[dict]):
         if len(data) < 1:
@@ -67,10 +72,8 @@ class AudioChunkManager:
                 'flushed_index': None, # how much of the file has been assembled
                 'chunks': {}
             }
-            # create directory for saving data
             recording_dir_name = self.get_dirname(title)
-            path = 'RECORDINGS/' + recording_dir_name
-            recording_path: str = os.path.join(settings.MEDIA_ROOT, path)
+            recording_path: str = self.recording_base_path + recording_dir_name
             os.makedirs(recording_path, exist_ok=True)
             recording_file_path: str = os.path.join(recording_path, validate_linux_filename(title) + ".wav")
             self.recordings[self.active_recording_id]['recording_path'] = recording_path
@@ -662,6 +665,32 @@ def validate_linux_filename(title: str) -> str:
 
     # If all checks pass, sanitize spaces and return the valid filename
     return title.replace(' ', '_')
+
+def get_recording_base_path() -> str:
+    # check if there is a mounted directory in the UCloud work folder
+    source_directory = settings.UCLOUD_DIRECTORY
+    mounted_folder = False
+    recording_base_dir = None
+    for entry in os.scandir(source_directory):
+        # Check if the entry is a directory
+        if entry.is_dir():
+            mounted_folder = True
+            recording_base_dir = entry.path
+            if entry.name == 'RECORDINGS':
+                logger.info("Using existing RECORDINGS directory in UCloud mounted folder.")
+                return entry.path + '/'
+    if not mounted_folder:
+        # no UCloud mounted folder, create recordings dir and return path to it
+        logger.info("No UCloud mounted folder, creating/using RECORDINGS directory.")
+        recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
+        os.makedirs(recording_path, exist_ok=True)
+        return recording_path
+    else:
+        # create RECORDINGS folder in UCloud folder
+        logger.info("Creating/using RECORDINGS directory in UCloud mounted folder.")
+        recording_path: str = os.path.join(recording_base_dir, 'RECORDINGS/')
+        os.makedirs(recording_path, exist_ok=True)
+        return recording_path
 
 def save_audio_data_for_test(audio_data, recording_id, chunk_index, includes_header, directory="dictaphone/resources/test_chunks"):
     """

@@ -123,6 +123,8 @@ MEDIA_URL = '/media/'
 
 MEDIA_ROOT = BASE_DIR / 'media'
 
+UCLOUD_DIRECTORY = BASE_DIR / 'ucloud'
+
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50000000000
 
 # Default primary key field type
