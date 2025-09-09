@@ -1,0 +1,50 @@
+name: Build and test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types:
+      - synchronize
+      - opened
+      - reopened
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      # variables for running test suite
+      SECRET_KEY: 'a-test-secret-key-that-is-not-used-in-production'
+      DEBUG: 'True'
+      DJANGO_LOG_HANDLER: 'console'
+      DJANGO_LOG_LEVEL: 'DEBUG'
+      DJANGO_LOG_FILE: '${{ github.workspace }}/dictaphone/django.log'
+
+    steps:
+      # Step 1: Check out the code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+
+      # Step 3: Install system packages
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y redis 
+
+      # Step 4: Install python libraries
+      - name: Install Python libraries
+        run: |
+          pip install django django-cors-headers django-rest-framework celery redis channels_redis python-dotenv channels daphne pytest pytest-asyncio
+
+      # Step 5: Run unit and integration tests
+      - name: Run application tests
+        run: |
+          pytest -v -s "${{ github.workspace }}/dictaphone"

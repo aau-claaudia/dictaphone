@@ -24,11 +24,12 @@
     box-sizing: border-box;
 }
 
-/* Media query for mobile devices */
+/* --- Mobile Styles (for screens 600px or less) --- */
 @media (max-width: 600px) {
     .error-modal {
         /* Reduce horizontal padding on smaller screens */
         padding: 25px 20px;
+        max-width: 300px;
     }
 }
 

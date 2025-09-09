@@ -5,7 +5,7 @@ import React from 'react';
  * handling for Firefox to prevent WebSocket disconnections.
  *
  */
-const DownloadTableRows = ({ groupedFiles, classNameForStyling, isFirefox }) => {
+const TranscriptionFilesTable = ({ groupedFiles, isFirefox, maxFilesInGroup, fileNameStyle }) => {
     const getFileExtension = (fileName) => {
         const specialCases = ['dote.json'];
         for (const ext of specialCases) {
@@ -33,55 +33,77 @@ const DownloadTableRows = ({ groupedFiles, classNameForStyling, isFirefox }) => 
 
     // Render a special version for Firefox that uses a hidden iframe as a target.
     // This downloads the file without the main page interpreting it as navigation.
-    if (isFirefox) {
+    const renderFileLink = (result, index, subIndex) => {
+        const fileExtension = getFileExtension(result.file_name);
+        const title = getTitleForFileExtension(fileExtension);
+
+        if (isFirefox) {
+            const iframeId = `downloadIframe-${index}-${subIndex}`;
+            return (
+                <>
+                    <iframe id={iframeId} name={iframeId} style={{ display: "none" }} title="Download helper" />
+                    <a href={result.file_url}
+                       title={title}
+                       target={iframeId}
+                       className="button"
+                       download>
+                        {fileExtension}
+                    </a>
+                </>
+            );
+        }
+
         return (
-            <>
+            <a href={result.file_url}
+               title={title}
+               rel="noreferrer"
+               className="button"
+               download>
+                {fileExtension}
+            </a>
+        );
+    };
+    return (
+        <div className="transcription-files-container">
+            {/* Desktop Table View */}
+            <table className="transcription-files-table">
+                <thead>
+                <tr>
+                    <th>File</th>
+                    <th colSpan={maxFilesInGroup}>Extensions</th>
+                </tr>
+                </thead>
+                <tbody>
                 {Object.keys(groupedFiles).map((key, index) => (
                     <tr key={index}>
-                        <td className={classNameForStyling} title={key}>{key}</td>
-                        {groupedFiles[key].map((result, subIndex) => {
-                            // Generate a unique ID for each iframe to prevent conflicts.
-                            const iframeId = `downloadIframe-${index}-${subIndex}`;
-                            return (
-                                <td key={subIndex}>
-                                    <iframe id={iframeId} name={iframeId} style={{ display: "none" }} title="Download helper" />
-                                    <a href={"http://localhost:8001" + result.file_url}
-                                       title={getTitleForFileExtension(getFileExtension(result.file_name))}
-                                       target={iframeId}
-                                       className="button"
-                                       download>
-                                        {getFileExtension(result.file_name)}
-                                    </a>
-                                </td>
-                            );
-                        })}
+                        <td className={fileNameStyle} title={key}>{key}</td>
+                        {groupedFiles[key].map((result, subIndex) => (
+                            <td key={subIndex}>
+                                {renderFileLink(result, index, subIndex)}
+                            </td>
+                        ))}
                     </tr>
                 ))}
-            </>
-        );
-    }
-    // For all other browsers (Chrome, Edge, etc.), the standard `download` attribute works reliably
-    // when the server sends the correct 'Content-Disposition' header.
-    return (
-        <>
-            {Object.keys(groupedFiles).map((key, index) => (
-                <tr key={index}>
-                    <td className={classNameForStyling} title={key}>{key}</td>
-                    {groupedFiles[key].map((result, subIndex) => (
-                        <td key={subIndex}>
-                            <a href={"http://localhost:8001" + result.file_url}
-                               title={getTitleForFileExtension(getFileExtension(result.file_name))}
-                               rel="noreferrer"
-                               className="button"
-                               download>
-                                {getFileExtension(result.file_name)}
-                            </a>
-                        </td>
-                    ))}
-                </tr>
-            ))}
-        </>
+                </tbody>
+            </table>
+
+            {/* Mobile Card View */}
+            <div className="transcription-files-list">
+                {Object.keys(groupedFiles).map((key, index) => (
+                    <div key={index} className="file-card">
+                        <div className="file-card-name" title={key}>{key}</div>
+                        <div className="file-card-links">
+                            {groupedFiles[key].map((result, subIndex) => (
+                                <div key={subIndex}>
+                                    {renderFileLink(result, index, subIndex)}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 };
 
-export default DownloadTableRows;
+            export default TranscriptionFilesTable;

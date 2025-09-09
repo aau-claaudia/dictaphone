@@ -28,9 +28,14 @@ class AudioChunkManager:
         self.recordings = {}
         self.lock = asyncio.Lock() # Lock for async operations
         if load_data_from_server:
+            # not running in test mode
+            self.recording_base_path = get_recording_base_path()
+            self.initialize_recording_data(load_all_recordings_status(self.recording_base_path))
+        else:
+            # running integration test
             recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
             os.makedirs(recording_path, exist_ok=True)
-            self.initialize_recording_data(load_all_recordings_status(recording_path))
+            self.recording_base_path = recording_path
 
     def initialize_recording_data(self, data: list[dict]):
         if len(data) < 1:
@@ -67,10 +72,8 @@ class AudioChunkManager:
                 'flushed_index': None, # how much of the file has been assembled
                 'chunks': {}
             }
-            # create directory for saving data
             recording_dir_name = self.get_dirname(title)
-            path = 'RECORDINGS/' + recording_dir_name
-            recording_path: str = os.path.join(settings.MEDIA_ROOT, path)
+            recording_path: str = self.recording_base_path + recording_dir_name
             os.makedirs(recording_path, exist_ok=True)
             recording_file_path: str = os.path.join(recording_path, validate_linux_filename(title) + ".wav")
             self.recordings[self.active_recording_id]['recording_path'] = recording_path
@@ -294,17 +297,21 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                         if len(lines) < 2:
                             logger.warning(f"Malformed completion log (too short): {log_path}")
                             continue
-
-                        recording_id = int(lines[0].strip())
-                        status_name = lines[1].strip()
-                        status = RecordingStatus[status_name] # Convert string back to enum
+                        log_data = {}
+                        for line in lines:
+                            if ":" in line:
+                                key, value = line.split(":", 1)
+                                log_data[key.strip()] = value.strip()
+                        recording_id = int(log_data["Recording ID"])
+                        status_name = log_data["Status"]
+                        status = RecordingStatus[status_name]  # Convert string back to enum
                         all_statuses.append({"recording_id": recording_id,
                                              "recording_path": recording_dir,
                                              "file_path": wav_path,
                                              "status": status,
                                              "title": title,
                                              "results": results})
-                except (IndexError, TypeError, ValueError) as e:
+                except (IndexError, TypeError, ValueError, KeyError) as e:
                     logger.error(f"Could not parse completion log {log_path}: {e}")
             elif os.path.isfile(wav_path):
                 try:
@@ -336,7 +343,7 @@ def clean_dir(path):
     try:
         # handle case with empty directory, exceptional error, cleanup directory
         os.removedirs(path)
-    except FileNotFoundError as e:
+    except OSError as e:
         logger.error("Directory could not be cleaned.", e)
 
 
@@ -348,7 +355,6 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         self.monitor_task = None
 
     async def connect(self):
-        # TODO: we need to test that Websocket authentication is not needed, e.g. only the user starting the job can connect to the Websocket
         await self.accept()
 
     async def disconnect(self, close_code):
@@ -480,9 +486,9 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
 
                 os.makedirs(recording_dir, exist_ok=True)
                 with open(log_path, "w") as f:
-                    f.write(f"{recording_id}\n")
-                    f.write(f"{status.name}\n")
-                    f.write(f"{timestamp_finalized}\n")
+                    f.write(f"Recording ID: {recording_id}\n")
+                    f.write(f"Status: {status.name}\n")
+                    f.write(f"Completion time: {timestamp_finalized}\n")
                 logger.info(f"Wrote completion log for recording {recording_id} with status {status.name}")
             except Exception as e:
                 logger.error(f"Failed to write completion log for recording {recording_id}: {e}")
@@ -543,6 +549,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         recording_dir_path = self.chunk_manager.get_recording_dir_path(recording_id)
         recording_file_path = self.chunk_manager.get_file_path(recording_id)
         # Get the file size
+        size = None
         try:
             size = os.path.getsize(recording_file_path)
         except FileNotFoundError:
@@ -658,6 +665,32 @@ def validate_linux_filename(title: str) -> str:
 
     # If all checks pass, sanitize spaces and return the valid filename
     return title.replace(' ', '_')
+
+def get_recording_base_path() -> str:
+    # check if there is a mounted directory in the UCloud work folder
+    source_directory = settings.UCLOUD_DIRECTORY
+    mounted_folder = False
+    recording_base_dir = None
+    for entry in os.scandir(source_directory):
+        # Check if the entry is a directory
+        if entry.is_dir():
+            mounted_folder = True
+            recording_base_dir = entry.path
+            if entry.name == 'RECORDINGS':
+                logger.info("Using existing RECORDINGS directory in UCloud mounted folder.")
+                return entry.path + '/'
+    if not mounted_folder:
+        # no UCloud mounted folder, create recordings dir and return path to it
+        logger.info("No UCloud mounted folder, creating RECORDINGS directory.")
+        recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
+        os.makedirs(recording_path, exist_ok=True)
+        return recording_path
+    else:
+        # create RECORDINGS folder in UCloud folder
+        logger.info("Creating/using RECORDINGS directory in UCloud mounted folder.")
+        recording_path: str = os.path.join(recording_base_dir, 'RECORDINGS/')
+        os.makedirs(recording_path, exist_ok=True)
+        return recording_path
 
 def save_audio_data_for_test(audio_data, recording_id, chunk_index, includes_header, directory="dictaphone/resources/test_chunks"):
     """

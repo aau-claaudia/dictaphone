@@ -9,24 +9,23 @@ https://docs.djangoproject.com/en/5.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
-import os
 from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv()
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-1t2i)9v^1^n$4@_w72wlb$71r)=o1(kg2lnma-!fni9*ei#y75'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+SECRET_KEY = os.environ.get('SECRET_KEY')
+DEBUG = os.environ.get('DEBUG') == 'True'
+DJANGO_LOG_HANDLER = os.environ.get('DJANGO_LOG_HANDLER', 'console')
+DJANGO_LOG_FILE = os.environ.get('DJANGO_LOG_FILE', '/var/log/django/app.log')
 
 ALLOWED_HOSTS = ['*']
-
 
 # Application definition
 
@@ -58,7 +57,7 @@ ROOT_URLCONF = 'backend.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR],
+        "DIRS": [os.path.join(BASE_DIR, "frontend", "build")],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -143,16 +142,8 @@ CORS_ALLOWED_ORIGINS = [
     'https://localhost:8000', # Django server
     'https://localhost:8080', # React Nginx server
 ]
-CSRF_TRUSTED_ORIGINS = [
-    'http://localhost:5173',  # Vite dev server
-    'http://localhost:8000', # Django server
-]
-CORS_ORIGINS_WHITELIST = [
-    'http://localhost:5173',  # Vite dev server
-    'http://localhost:8000', # Django server
-]
 
-SESSION_COOKIE_HTTPONLY = False
+SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'None'  # Adjust as needed (e.g., 'Strict' or 'None' for cross-origin)
 CSRF_COOKIE_SAMESITE = 'None'
 CORS_ALLOW_CREDENTIALS = True
@@ -187,26 +178,37 @@ LOGGING = {
     },
     "handlers": {
         "console": {
+            "level": "DEBUG",
             "class": "logging.StreamHandler",
             "formatter": "verbose",
         },
+        "file": {
+            "level": "INFO",
+            "class": "logging.handlers.RotatingFileHandler",
+            "formatter": "verbose",
+            # using environment variable for the log file path, with a default.
+            "filename": DJANGO_LOG_FILE,
+            "maxBytes": 1024 * 1024 * 20,  # 20 MB
+            "backupCount": 5,
+        },
     },
     "loggers": {
-        # This is the key part: it catches logs from YOUR app code.
         "root": {
-            "handlers": ["console"],
-            # Use DEBUG to see everything during development.
+            "handlers": [DJANGO_LOG_HANDLER],
             "level": "INFO",
         },
-        # This logger handles messages from Django's request/response cycle.
-        "django.server": {
-            "handlers": ["console"],
-            "level": "DEBUG",
+        "django": {
+            "handlers": [DJANGO_LOG_HANDLER],
+            "level": "INFO",
             "propagate": False,
         },
-        # This logger handles messages from Daphne.
-        "daphne.server": {
-            "handlers": ["console"],
+        "django.server": {
+            "handlers": [DJANGO_LOG_HANDLER],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "daphne": {
+            "handlers": [DJANGO_LOG_HANDLER],
             "level": "INFO",
             "propagate": False,
         },

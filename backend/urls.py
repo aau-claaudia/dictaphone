@@ -16,7 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, re_path
-from dictaphone.views import index, serve_file
+from dictaphone.views import serve_file, index
 
 urlpatterns = [
     path('admin/', admin.site.urls),
