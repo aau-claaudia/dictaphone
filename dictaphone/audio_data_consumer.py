@@ -681,7 +681,7 @@ def get_recording_base_path() -> str:
                 return entry.path + '/'
     if not mounted_folder:
         # no UCloud mounted folder, create recordings dir and return path to it
-        logger.info("No UCloud mounted folder, creating/using RECORDINGS directory.")
+        logger.info("No UCloud mounted folder, creating RECORDINGS directory.")
         recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
         os.makedirs(recording_path, exist_ok=True)
         return recording_path
