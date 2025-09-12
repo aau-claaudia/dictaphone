@@ -438,11 +438,25 @@ const App = () => {
         inputElement.style.width = `${Math.max(inputElement.value.length * 0.6, 10)}em`;
     };
 
-    const initiateRecording = (index) => {
-        const updatedSections = [...sectionsRef.current];
-        updatedSections[index].isInitiating = true;
-        setSections(updatedSections);
-        sendControlMessage("start_recording", sections[currentSection].title);
+    const initiateRecording = async (index) => {
+        let streamInstance;
+        try {
+            // Request access to the microphone
+            streamInstance = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    noiseSuppression: false,
+                    echoCancellation: false
+                }
+            });
+            mediaStreamRef.current = streamInstance;
+            const updatedSections = [...sectionsRef.current];
+            updatedSections[index].isInitiating = true;
+            setSections(updatedSections);
+            sendControlMessage("start_recording", sections[currentSection].title);
+        } catch (e) {
+            console.debug("Error when getting access to user mic.", e);
+            setError(new Error("Could not get access to the microphone. Please enable in the top left corner and refresh the page."));
+        }
     }
 
     const startTranscription = (recordingId) => {
@@ -498,17 +512,9 @@ const App = () => {
         updatedSections[index].isInitiating = false;
         setSections(updatedSections);
 
-        // Request access to the microphone
-        const streamInstance = await navigator.mediaDevices.getUserMedia({
-            audio: {
-                noiseSuppression: false,
-                echoCancellation: false
-            }
-        });
-        mediaStreamRef.current = streamInstance;
         const audioContext = new AudioContext();
 
-        const defaultSource = audioContext.createMediaStreamSource(streamInstance);
+        const defaultSource = audioContext.createMediaStreamSource(mediaStreamRef.current);
         // creating a gain node to set the mic level, amplify according to setting
         const gainNode = audioContext.createGain();
         const destination = audioContext.createMediaStreamDestination();
