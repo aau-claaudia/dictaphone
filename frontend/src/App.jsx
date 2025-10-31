@@ -119,7 +119,7 @@ const App = () => {
 
     const handleDisconnect = async () => {
         console.log("WebSocket disconnected");
-        setError(new Error("The server is not responding. Please check your connection. Data recorded before disconnect can be found on the server."));
+        setError(new Error("The client was disconnected from the server. Data recorded before disconnecting can be found on the server. Active transcriptions will keep running on the server unless the server was stopped."));
         // The server disconnected. Stop the active recording and clear the chunk inventory.
         stopRecordingOnDisconnect();
     }
@@ -141,11 +141,20 @@ const App = () => {
                 console.debug("Message type received from backend: " + data.message_type);
                 switch (data.message_type) {
                     case "initialization_data":
-                        //if (data.recordings && data.recordings.size > 0) {
                         if (data.recordings && data.recordings.length > 0) {
                             const initializationSections = [];
                             data.recordings.forEach(item => {
                                 //console.debug("Recording:", item);
+                                let transcriptionStart = null;
+                                let transcribingFlag = false;
+                                if (item.transcription_start_time) {
+                                    transcriptionStart = Date.parse(item.transcription_start_time);
+                                    transcribingFlag = true;
+                                }
+                                let fileSize = null;
+                                if (item.file_size) {
+                                    fileSize = item.file_size;
+                                }
                                 let sectionObject = {
                                     title: item.title,
                                     recordingId: item.recording_id,
@@ -157,11 +166,11 @@ const App = () => {
                                     titleLocked: true,
                                     audioUrl: item.recording_file_path,
                                     audioPath: null,
-                                    size: null,
+                                    size: fileSize,
                                     finalizing: false,
                                     finalization_status: item.status,
-                                    transcribing: false,
-                                    transcriptionStartTime: null,
+                                    transcribing: transcribingFlag,
+                                    transcriptionStartTime: transcriptionStart,
                                     taskId: null,
                                     transcriptionResults: item.results
                                 }
@@ -794,7 +803,7 @@ const App = () => {
                             )
                         }
                         {
-                            sections[currentSection].transcriptionResults && sections[currentSection].transcriptionResults.length > 0 && (
+                            sections[currentSection].transcriptionResults && sections[currentSection].transcriptionResults.length > 1 && (
                                 <Results
                                     results={sections[currentSection].transcriptionResults}
                                 />
