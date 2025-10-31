@@ -51,6 +51,8 @@ class AudioChunkManager:
                 'status': recording['status'],
                 'recording_file_path': recording['file_path'],
                 'recording_path': recording['recording_path'],
+                'transcription_start_time': recording['transcription_start_time'],
+                'file_size': recording['file_size'],
                 'results': recording['results'] if recording['results'] is not None else []
             }
             if recording_id > max_recording_id:
@@ -305,11 +307,18 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                         recording_id = int(log_data["Recording ID"])
                         status_name = log_data["Status"]
                         status = RecordingStatus[status_name]  # Convert string back to enum
+                        # if there is transcription start time and not transcription end time, then add start time
+                        # this signals to client that there is an active transcription
+                        transcription_start_time = None
+                        if "Transcription start time" in log_data and "Transcription end time" not in log_data:
+                            transcription_start_time = log_data["Transcription start time"]
                         all_statuses.append({"recording_id": recording_id,
                                              "recording_path": recording_dir,
                                              "file_path": wav_path,
                                              "status": status,
                                              "title": title,
+                                             "transcription_start_time": transcription_start_time,
+                                             "file_size": os.path.getsize(wav_path),
                                              "results": results})
                 except (IndexError, TypeError, ValueError, KeyError) as e:
                     logger.error(f"Could not parse completion log {log_path}: {e}")
@@ -323,6 +332,8 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
                                          "file_path": wav_path,
                                          "status": RecordingStatus.INTERRUPTED_NOT_VERIFIED,
                                          "title": title,
+                                         "transcription_start_time": None,
+                                         "file_size": None,
                                          "results": results})
                 except (IndexError, TypeError, ValueError) as e:
                     logger.error(f"Could not parse recording ID from directory {recording_dir}: {e}")
@@ -353,9 +364,16 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         self.chunk_manager = AudioChunkManager(self)
         self.active_tasks = {} # {task_id: {details}}
         self.monitor_task = None
+        self.transcription_group_name = "transcription_monitor_group"
 
     async def connect(self):
         await self.accept()
+        # The group is used to be able to get transcription_completed messages across client re-connects
+        # The group_add operation is idempotent
+        await self.channel_layer.group_add(
+            self.transcription_group_name,
+            self.channel_name
+        )
 
     async def disconnect(self, close_code):
         # this is called if the client disconnects, e.g. if the client browser window is closed or refreshed
@@ -409,6 +427,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                             'title': item['title'],
                             'status': RecordingStatus(item['status']).value,
                             'recording_file_path': item['recording_file_path'],
+                            "transcription_start_time": item['transcription_start_time'],
+                            'file_size': item['file_size'],
                             'results': item['results']
                         }
                     await self.send(text_data=json.dumps({
@@ -562,6 +582,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             "transcription_dir": os.path.join(recording_dir_path, "TRANSCRIPTIONS")
         }
         logger.info(f"Started transcription task {task_id} for recording {recording_id}")
+        self.log_transcription_start(recording_id)
         # Send the task_id back to the client
         await self.send(text_data=json.dumps({
             "message_type": "transcription_started",
@@ -594,13 +615,17 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                         try:
                             task_info = active_tasks.pop(task_id)
                             logger.info(f"Task {task_id} for recording {task_info['recording_id']} finished with state: {result.state}")
-                            await self.send(text_data=json.dumps({
-                                "message_type": "transcription_completed",
-                                "task_id": task_id,
-                                "recording_id": task_info['recording_id'],
-                                "state": result.state, # e.g., 'SUCCESS', 'FAILURE', 'REVOKED'
-                                "results": prepare_results(task_info["transcription_dir"])
-                            }))
+                            self.log_transcription_end(task_info['recording_id'])
+                            await self.channel_layer.group_send(
+                                self.transcription_group_name,
+                                {
+                                    "type": "transcription_completed",  # This maps to the handler method
+                                    "task_id": task_id,
+                                    "recording_id": task_info['recording_id'],
+                                    "state": result.state, # e.g., 'SUCCESS', 'FAILURE', 'REVOKED'
+                                    "results": prepare_results(task_info["transcription_dir"])
+                                }
+                            )
                         except KeyError:
                             # Task was removed in another operation, just continue
                             pass
@@ -610,6 +635,74 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             # This ensures the monitor task reference is cleared, so a new one can be started later.
             logger.info("Transcription task monitor has shut down.")
             self.monitor_task = None
+
+    async def transcription_completed(self, event):
+        """
+        Handler for the 'transcription_completed' event sent to a group.
+        Forwards the message to the client over the current WebSocket connection.
+        """
+        await self.send(text_data=json.dumps({
+            "message_type": "transcription_completed",
+            "task_id": event["task_id"],
+            "recording_id": event["recording_id"],
+            "state": event["state"],
+            "results": event["results"]
+        }))
+
+    def log_transcription_start(self, recording_id: int):
+        """Logs the start time of a transcription, clearing previous timestamps.
+        Args:
+            recording_id: The ID of the recording.
+        """
+        try:
+            wav_path = self.chunk_manager.get_file_path(recording_id)
+            if not wav_path:
+                logger.error(f"Cannot log transcription start for {recording_id}: path is unknown.")
+                return
+
+            log_path = os.path.join(os.path.dirname(wav_path), "completion_log.txt")
+            if not os.path.exists(log_path):
+                logger.warning(f"Completion log for recording {recording_id} not found. Cannot log transcription start.")
+                return
+
+            with open(log_path, "r") as f:
+                lines = f.readlines()
+
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+            start_key = "Transcription start time:"
+            end_key = "Transcription end time:"
+
+            # Remove any previous start/end time to handle re-transcription
+            filtered_lines = [line for line in lines if not line.strip().startswith((start_key, end_key))]
+            filtered_lines.append(f"{start_key} {timestamp}\n")
+
+            with open(log_path, "w") as f:
+                f.writelines(filtered_lines)
+        except Exception as e:
+            logger.error(f"Failed to log transcription start for {recording_id}: {e}")
+
+    def log_transcription_end(self, recording_id: int):
+        """Logs the end time of a transcription.
+        Args:
+            recording_id: The ID of the recording.
+        """
+        try:
+            wav_path = self.chunk_manager.get_file_path(recording_id)
+            if not wav_path:
+                logger.error(f"Cannot log transcription end for {recording_id}: path is unknown.")
+                return
+
+            log_path = os.path.join(os.path.dirname(wav_path), "completion_log.txt")
+            if not os.path.exists(log_path):
+                logger.warning(f"Completion log for recording {recording_id} not found. Cannot log transcription end.")
+                return
+
+            timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+            with open(log_path, "a") as f:
+                f.write(f"Transcription end time: {timestamp}\n")
+        except Exception as e:
+            logger.error(f"Failed to log transcription end for {recording_id}: {e}")
 
 
 def prepare_results(transcription_dir: str) -> list[dict]:
