@@ -131,6 +131,10 @@ h1 {
   background-color: darkgreen; /* Darker blue on hover */
 }
 
+.add-section-button:disabled {
+  background-color: #adb5bd; /* Light grey for disabled state */
+}
+
 .recording-content {
   margin-top: 10px;
 }

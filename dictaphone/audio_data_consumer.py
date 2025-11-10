@@ -599,7 +599,9 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         task_result = transcription_task.AsyncResult(task_id)
         task_result.abort()  # Abort the task
         # remove from active_tasks
-        self.active_tasks.pop(task_id)
+        task_info = self.active_tasks.pop(task_id)
+        # update completion log
+        self.log_transcription_cancelled(task_info['recording_id'])
 
     async def _task_monitor(self, active_tasks: dict):
         try:
@@ -680,6 +682,36 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                 f.writelines(filtered_lines)
         except Exception as e:
             logger.error(f"Failed to log transcription start for {recording_id}: {e}")
+
+    def log_transcription_cancelled(self, recording_id: int):
+        """Clear transcription timestamps from the completion log
+        Args:
+            recording_id: The ID of the recording.
+        """
+        try:
+            wav_path = self.chunk_manager.get_file_path(recording_id)
+            if not wav_path:
+                logger.error(f"Cannot update completion log for {recording_id}: path is unknown.")
+                return
+
+            log_path = os.path.join(os.path.dirname(wav_path), "completion_log.txt")
+            if not os.path.exists(log_path):
+                logger.warning(f"Completion log for recording {recording_id} not found. Cannot update completion log.")
+                return
+
+            with open(log_path, "r") as f:
+                lines = f.readlines()
+
+            start_key = "Transcription start time:"
+            end_key = "Transcription end time:"
+
+            # Remove any previous start/end time to handle re-transcription
+            filtered_lines = [line for line in lines if not line.strip().startswith((start_key, end_key))]
+
+            with open(log_path, "w") as f:
+                f.writelines(filtered_lines)
+        except Exception as e:
+            logger.error(f"Failed to update completion log for {recording_id}: {e}")
 
     def log_transcription_end(self, recording_id: int):
         """Logs the end time of a transcription.
