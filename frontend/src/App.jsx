@@ -703,7 +703,10 @@ const App = () => {
                             placeholder="Enter title"
                             disabled={sections[currentSection].titleLocked}
                         />
-                        <button className="add-section-button" onClick={addSection} title="Add new recording">+</button>
+                        <button className="add-section-button" onClick={addSection} title="Add new recording"
+                                disabled={recording || sections[currentSection].isInitiating || sections[currentSection].finalizing}>
+                            +
+                        </button>
                     </div>
                     <div className="recording-content">
                         <button className="transcribe-button" onClick={() => initiateRecording(currentSection)}
@@ -711,7 +714,7 @@ const App = () => {
                             {recording ? (sections[currentSection].isInitiating ? 'Initiating' : 'Recording') : 'Start recording'}
                         </button>
                         <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection, true)}
-                                disabled={!recording}>
+                                disabled={!sections[currentSection].isRecording}>
                             {sections[currentSection].finalizing ? 'Verifying recording' : 'Stop recording'}
                         </button>
                         <button className="transcribe-button" onClick={showOrHideRecordingSettings}>
@@ -772,7 +775,7 @@ const App = () => {
                         <div style={{marginTop: 10}}>
                             <button className="transcribe-button"
                                     onClick={() => startTranscription(sections[currentSection].recordingId)}
-                                    disabled={recording || !sections[currentSection].audioUrl || sections[currentSection].transcribing}>
+                                    disabled={sections[currentSection].isRecording || !sections[currentSection].audioUrl || sections[currentSection].transcribing}>
                                 {sections[currentSection].transcribing ? 'In progress' : 'Transcribe recording'}
                             </button>
                             <button className="transcribe-stop-button"
