@@ -25,12 +25,12 @@ def calculate_model_memory() -> int:
                 logger.info(f"Total VRAM on device: {total_mem_gb:.2f} GB")
                 gpu_memory += total_mem_gb
 
-            logger.info("Available GPU memory for whisper models (floored): " + str(math.floor(gpu_memory)))
+            logger.info(f"Available GPU memory for whisper models: {gpu_memory:.2f} GB")
             return math.floor(gpu_memory)
         else:
             # use the number of machine RAM if there is no GPU available
             machine_memory = int(settings.MEMORY_IN_GIGS)
-            logger.info("Available memory for whisper models: " + str(machine_memory))
+            logger.info("Available memory for whisper models: " + str(machine_memory) + " GB")
 
             return machine_memory
     except Exception as e:
