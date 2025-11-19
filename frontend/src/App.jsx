@@ -20,7 +20,8 @@ const App = () => {
         const dataFromSession = sessionStorage.getItem(keyname);
         return dataFromSession ? parseInt(JSON.parse(dataFromSession), 10) : parseInt(value, 10);
     }
-    const [modelSize, setModelSize] = useState(getInitialString("modelSize", "large-v3"))
+    const [modelSize, setModelSize] = useState("large-v3");
+    const [modelList, setModelList] = useState([]);
     const [language, setLanguage] = useState(getInitialString("language", "auto"))
     const micBoostLevel = useRef(getInitialInteger("micBoostLevel", 1))
     const [recording, setRecording] = useState(false);
@@ -102,9 +103,6 @@ const App = () => {
         currentSectionRef.current = currentSection;
     }, [currentSection]);
     useEffect(() => {
-        sessionStorage.setItem("modelSize", JSON.stringify(modelSize))
-    }, [modelSize]);
-    useEffect(() => {
         sessionStorage.setItem("language", JSON.stringify(language))
     }, [language]);
 
@@ -128,6 +126,25 @@ const App = () => {
         console.log("WebSocket error", e);
         setError(new Error("Server communication error detected. Please check your connection."));
     }
+
+    // Function to determine the best default model based on availability and preference order.
+    const getDefaultModel = (list) => {
+        const preferenceOrder = ["large-v3", "large-v3-turbo", "medium", "small", "base"];
+        const availableModels = list.map(modelStr => {
+            const [modelName] = modelStr.split(' ');
+            const isDisabled = modelStr.includes("(not enough memory)");
+            return { name: modelName, disabled: isDisabled };
+        });
+
+        for (const preferredModel of preferenceOrder) {
+            const model = availableModels.find(m => m.name === preferredModel);
+            if (model && !model.disabled) {
+                return model.name;
+            }
+        }
+        // Fallback to the first available model if no preferred models are available
+        return availableModels.find(m => !m.disabled)?.name || '';
+    };
 
     const receiveMessage = async (message) => {
         // client receives three types of messages
@@ -179,7 +196,15 @@ const App = () => {
                             initializationSections.sort((a, b) => a.recordingId - b.recordingId);
                             setSections(initializationSections);
                         } else {
-                            console.debug("No initialization data returned.");
+                            console.debug("No initialization recording data returned.");
+                        }
+                        if (data.model_list && data.model_list.length > 0) {
+                            // update the list of whisper models
+                            //console.debug(data.model_list)
+                            setModelSize(getDefaultModel(data.model_list))
+                            setModelList(data.model_list);
+                        } else {
+                            console.debug("No whisper models returned.");
                         }
                         break;
                     case "ack_start_recording":
@@ -793,6 +818,7 @@ const App = () => {
                                         currentModelSize={modelSize}
                                         onUpdateLanguage={onUpdateLanguage}
                                         currentLanguage={language}
+                                        modelList={modelList}
                                     />
                                 )
                             }

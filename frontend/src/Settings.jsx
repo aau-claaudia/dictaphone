@@ -1,6 +1,7 @@
 import React from 'react';
 
-const Settings = ({onUpdateModel, currentModelSize, onUpdateLanguage, currentLanguage}) => {
+const Settings = ({onUpdateModel, currentModelSize, onUpdateLanguage, currentLanguage, modelList}) => {
+
     // Function to handle model change
     const handleModelChange = (event) => {
         onUpdateModel(event.target.value);
@@ -19,11 +20,11 @@ const Settings = ({onUpdateModel, currentModelSize, onUpdateLanguage, currentLan
                 <h3>Select model</h3>
                 <div className="select-box">
                     <select defaultValue={currentModelSize} onChange={handleModelChange}>
-                        <option value="base">base</option>
-                        <option value="small">small</option>
-                        <option value="medium">medium</option>
-                        <option value="large-v3">large-v3</option>
-                        <option value="large-v3-turbo">large-v3-turbo</option>
+                        {modelList.map((modelStr) => {
+                            const modelName = modelStr.split(' ')[0];
+                            const isDisabled = modelStr.includes("(not enough memory)");
+                            return <option key={modelName} value={modelName} disabled={isDisabled}>{modelStr}</option>;
+                        })}
                     </select>
                 </div>
             </div>

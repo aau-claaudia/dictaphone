@@ -10,6 +10,7 @@ from django.conf import settings
 import logging
 from enum import Enum
 from .tasks import transcription_task
+from .model_memory_util import get_whisper_model_list
 
 logger = logging.getLogger(__name__)
 
@@ -433,7 +434,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                         }
                     await self.send(text_data=json.dumps({
                         'message_type': 'initialization_data',
-                        'recordings': list(client_data.values())
+                        'recordings': list(client_data.values()),
+                        'model_list': get_whisper_model_list()
                     }))
                 elif data.get("message") == "start_transcription":
                     logger.info("Received start_transcription control message.")

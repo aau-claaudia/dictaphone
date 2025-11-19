@@ -24,6 +24,7 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = os.environ.get('DEBUG') == 'True'
 DJANGO_LOG_HANDLER = os.environ.get('DJANGO_LOG_HANDLER', 'console')
 DJANGO_LOG_FILE = os.environ.get('DJANGO_LOG_FILE', '/var/log/django/app.log')
+MEMORY_IN_GIGS = os.environ.get('MEMORY_IN_GIGS', '16')
 
 ALLOWED_HOSTS = ['*']
 

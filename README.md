@@ -10,7 +10,7 @@ Transcription of recordings is done using the Transcriber project. Transcription
 
 ## Python packages needed
 ``` bash
-pip install django django-cors-headers django-rest-framework celery redis channels-redis python-dotenv channels daphne pytest pytest-asyncio
+pip install django django-cors-headers django-rest-framework celery redis channels-redis python-dotenv channels daphne pytest pytest-asyncio torch
 ```
 
 ## npm packages needed
@@ -24,13 +24,15 @@ npm install @vitejs/plugin-basic-ssl --save-dev
 ```
 
 ## Prepare Django backend.
-Create an environment file for test in the "dictaphone" project directory called ".env" with the following content (modify last line to fit your project directory)
+Create an environment file for test in the "dictaphone" project directory called ".env" with the following content (modify to fit your project directory and memory size)
+MEMORY_IN_GIGS is used for determining the usable whisper models.
 ```
 SECRET_KEY='django-insecure-1t2i)9v^1^n$4@_w72wlb$71r)=o1(kg2lnma-!fni9*ei#y75'
 DEBUG=True
 DJANGO_LOG_HANDLER='console'
 DJANGO_LOG_LEVEL='DEBUG'
 DJANGO_LOG_FILE='/home/nikko/projects/dictaphone/django.log'
+MEMORY_IN_GIGS=64
 ```
 
 ## Start daphne server for serving WebSocket (activate Python env)
@@ -43,12 +45,7 @@ daphne -p 8000 backend.asgi:application
 nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev --host
 ```
 
-## Run unit test
-``` bash
-(.venv) nikko@nikkoAtClaaudia:~/projects/dictaphone$ python -m unittest dictaphone/test_audio_chunk_manager.py
-```
-
-## Run integration test
+## Run unit and integration tests
 ``` bash
 (.venv) nikko@nikkoAtClaaudia:~/projects/dictaphone$ pytest -v --ignore=dictaphone/aau-whisper/
 ```
