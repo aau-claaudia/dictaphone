@@ -10,6 +10,7 @@ from django.conf import settings
 import logging
 from enum import Enum
 from .tasks import transcription_task
+from .model_memory_util import get_whisper_model_list
 
 logger = logging.getLogger(__name__)
 
@@ -385,6 +386,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             asyncio.create_task(self._handle_finalize_recording())
         else:
             logger.info("Disconnect - no active recording to finalize.")
+        # remove the channel from the group to prevent sending messages to a closed connection
+        await self.channel_layer.group_discard(
+            self.transcription_group_name, self.channel_name
+        )
 
     async def receive(self, text_data=None, bytes_data=None):
         """
@@ -433,7 +438,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                         }
                     await self.send(text_data=json.dumps({
                         'message_type': 'initialization_data',
-                        'recordings': list(client_data.values())
+                        'recordings': list(client_data.values()),
+                        'model_list': get_whisper_model_list()
                     }))
                 elif data.get("message") == "start_transcription":
                     logger.info("Received start_transcription control message.")
