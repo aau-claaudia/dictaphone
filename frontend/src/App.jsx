@@ -8,6 +8,7 @@ import {RecordingStatus} from './Constants.jsx';
 import TranscriptionStatus from "./TranscriptionStatus.jsx";
 import dictaphoneImage from "./assets/dictaphone_logo_690x386.png";
 import RecordingSettings from "./RecordingSettings.jsx";
+import MicTestOverlay from './MicTestOverlay';
 
 let isWavLibraryRegistered = false;
 
@@ -59,6 +60,7 @@ const App = () => {
     const socketRef = useRef(null);
     const chunkInventoryRef = useRef(new Map());
     const [error, setError] = useState(null);
+    const [showMicTestOverlay, setShowMicTestOverlay] = useState(false);
 
     // Determine protocol (ws or wss) based on the page's protocol (http or https)
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -493,6 +495,24 @@ const App = () => {
         }
     }
 
+    const initiateMicTest = async (index) => {
+        let streamInstance;
+        try {
+            // Request access to the microphone
+            streamInstance = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    noiseSuppression: false,
+                    echoCancellation: false
+                }
+            });
+            mediaStreamRef.current = streamInstance;
+            setShowMicTestOverlay(true);
+        } catch (e) {
+            console.debug("Error when getting access to user mic.", e);
+            setError(new Error("Could not get access to the microphone. Please enable in the top left corner and refresh the page."));
+        }
+    }
+
     const startTranscription = (recordingId) => {
         // update the section (start time and transcribing flag
         const updatedSections = [...sectionsRef.current];
@@ -705,7 +725,12 @@ const App = () => {
     const onUpdateBoost = (boost) => {
         micBoostLevel.current = parseInt(boost, 10);
         sessionStorage.setItem("micBoostLevel", JSON.stringify(micBoostLevel.current))
+        console.debug("Mic boost level saved:", micBoostLevel.current);
     }
+
+    const handleCloseMicTest = () => {
+        setShowMicTestOverlay(false);
+    };
 
     return (
         <div className='App'>
@@ -745,6 +770,17 @@ const App = () => {
                         <button className="transcribe-button" onClick={showOrHideRecordingSettings}>
                             {showRecordingSettings ? 'Hide settings' : 'Show settings'}
                         </button>
+                        <button className="transcribe-button" onClick={initiateMicTest} disabled={recording}>Test Microphone</button>
+                        {
+                            showMicTestOverlay && (
+                                <MicTestOverlay
+                                    mediaStream={mediaStreamRef.current}
+                                    initialMicBoostLevel={micBoostLevel.current}
+                                    onSave={onUpdateBoost}
+                                    onClose={handleCloseMicTest}
+                                />
+                            )
+                        }
                         {
                             showRecordingSettings && (
                                 <RecordingSettings
