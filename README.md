@@ -8,6 +8,8 @@ Transcription of recordings is done using the Transcriber project. Transcription
 ## Sequence diagram - user and component interaction
 ![Sequence Diagram](documentation/architecture.svg)
 
+# Setting up dictaphone for local development
+
 ## Python packages needed
 ``` bash
 pip install django django-cors-headers django-rest-framework celery redis channels-redis python-dotenv channels daphne pytest pytest-asyncio torch
@@ -19,7 +21,7 @@ npm install extendable-media-recorder extendable-media-recorder-wav-encoder
 ```
 
 ## npm package for testing the app on mobile phones (https needed)
-```
+``` bash
 npm install @vitejs/plugin-basic-ssl --save-dev
 ```
 
@@ -63,3 +65,26 @@ pip install -e .
 ``` bash
 (.venv) nikko@nikkoAtClaaudia:~/projects/dictaphone$ python -m celery -A backend worker -l info --concurrency=1
 ```
+
+# Testing on mobile device in local setup
+First create a wireless hotspot from your phone, and connect to this network from your pc.
+Then lookup the ip of that connection using e.g. the ifconfig command.
+Use this ip to start daphne with the -b flag.
+
+## Start daphne server for serving WebSocket (activate Python env)
+``` bash
+daphne -b 10.49.223.156 -p 8000 backend.asgi:application
+```
+The Celery worker is started as usual in the local setup.
+Before starting the development server, edit the vite.config.js file. 
+Change the plugin definition at the top to the one with basicSsl - this is needed for access from a mobile phone.
+In the same file change the "target" definitions to point to your network ip.
+Now start the development server as usual.
+
+## Start development react frontend
+``` bash
+nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev --host
+```
+You will see from the output that the server starts listening on HTTPS on your IP. 
+From your browser, now go to this URL, e.g. https://10.49.223.156:5173
+Click "accept the risk" and the app should show.
