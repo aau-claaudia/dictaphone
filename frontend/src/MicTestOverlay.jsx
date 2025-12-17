@@ -283,6 +283,8 @@ const MicTestOverlay = ({ mediaStream, initialMicBoostLevel, onSave, onClose }) 
         onClose();
     };
 
+    // TODO: extract styling to MicTestOverlay.CSS - make sure zIndex is 500 (error overlay is 1000)
+
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,

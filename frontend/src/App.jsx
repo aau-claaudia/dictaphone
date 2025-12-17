@@ -9,6 +9,7 @@ import TranscriptionStatus from "./TranscriptionStatus.jsx";
 import dictaphoneImage from "./assets/dictaphone_logo_690x386.png";
 import RecordingSettings from "./RecordingSettings.jsx";
 import MicTestOverlay from './MicTestOverlay';
+import "./Navigation.css";
 
 let isWavLibraryRegistered = false;
 
@@ -61,6 +62,8 @@ const App = () => {
     const chunkInventoryRef = useRef(new Map());
     const [error, setError] = useState(null);
     const [showMicTestOverlay, setShowMicTestOverlay] = useState(false);
+    const [showSectionList, setShowSectionList] = useState(false);
+    const dropdownRef = useRef(null);
 
     const WHISPER_MODELS = {
         "base": 1.0,
@@ -115,6 +118,20 @@ const App = () => {
     useEffect(() => {
         sessionStorage.setItem("language", JSON.stringify(language))
     }, [language]);
+
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowSectionList(false);
+            }
+        };
+        if (showSectionList) {
+            document.addEventListener("mousedown", handleClickOutside);
+        } else {
+            document.removeEventListener("mousedown", handleClickOutside);
+        }
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [showSectionList]);
 
     const handleRefresh = () => {
         window.location.reload();
@@ -439,6 +456,11 @@ const App = () => {
 
     const goToNextSection = () => {
         setCurrentSection((prev) => prev + 1);
+    };
+
+    const handleSectionSelect = (index) => {
+        setCurrentSection(index);
+        setShowSectionList(false); // Close dropdown after selection
     };
 
     const addSection = () => {
@@ -776,7 +798,9 @@ const App = () => {
                         <button className="transcribe-button" onClick={showOrHideRecordingSettings}>
                             {showRecordingSettings ? 'Hide settings' : 'Show settings'}
                         </button>
-                        <button className="transcribe-button" onClick={initiateMicTest} disabled={recording}>Test Microphone</button>
+                        <button className="transcribe-button" onClick={initiateMicTest} disabled={recording}>
+                            Test Microphone
+                        </button>
                         {
                             showMicTestOverlay && (
                                 <MicTestOverlay
@@ -882,15 +906,34 @@ const App = () => {
                             )
                         }
                     </div>
-                    <div className="section-navigation"
-                         style={{display: "flex", justifyContent: "center", marginTop: 20}}>
+                    <div className="section-navigation">
                         <button className="navigation-buttons" onClick={goToPreviousSection}
                                 disabled={currentSection === 0}>
                             Previous
                         </button>
-                        <span style={{margin: "0 10px"}}>
-                                Recording {currentSection + 1} of {sections.length}
-                            </span>
+                        <div className="dropdown-container" ref={dropdownRef}>
+                            <div className={`dropdown-trigger ${showSectionList ? 'open' : ''}`}
+                                 onClick={() => setShowSectionList(!showSectionList)}
+                                 title="Click to select a recording"
+                            >
+                                <span>
+                                    Recording {currentSection + 1} of {sections.length}
+                                </span>
+                                <span className="dropdown-caret">▼</span>
+                            </div>
+                            {showSectionList && (
+                                <div className="dropdown-menu">
+                                    <ul className="dropdown-list">
+                                        {sections.map((section, index) => (
+                                            <li key={index} onClick={() => handleSectionSelect(index)}
+                                                className="section-list-item">
+                                                {section.title}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
                         <button className="navigation-buttons" onClick={goToNextSection}
                                 disabled={currentSection === sections.length - 1}>
                             Next
