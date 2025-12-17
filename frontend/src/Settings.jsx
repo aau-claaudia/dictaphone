@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Settings = ({onUpdateModel, currentModelSize, onUpdateLanguage, currentLanguage, modelList}) => {
+const Settings = ({onUpdateModel, currentModelSize, availableMemory, whisperModels, onUpdateLanguage, currentLanguage}) => {
 
     // Function to handle model change
     const handleModelChange = (event) => {
@@ -20,13 +20,16 @@ const Settings = ({onUpdateModel, currentModelSize, onUpdateLanguage, currentLan
                 <h3>Select model</h3>
                 <div className="select-box">
                     <select defaultValue={currentModelSize} onChange={handleModelChange}>
-                        {modelList.map((modelStr) => {
-                            const modelName = modelStr.split(' ')[0];
-                            const isDisabled = modelStr.includes("(not enough memory)");
-                            return <option key={modelName} value={modelName} disabled={isDisabled}>{modelStr}</option>;
+                        {Object.entries(whisperModels).map(([modelName, memoryReq]) => {
+                            return <option key={modelName} value={modelName}>{modelName}</option>;
                         })}
                     </select>
                 </div>
+                {whisperModels[currentModelSize] > availableMemory && (
+                    <div className="memory-warning">
+                        Warning: If you need to use the transcription feature it is recommended to use a machine type with at least 16 cores / 64 GB of RAM. Using a less powerful machine may result in slow transcription and/or running out of memory.
+                    </div>
+                )}
             </div>
             <hr/>
 

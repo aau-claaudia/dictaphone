@@ -22,7 +22,7 @@ const App = () => {
         return dataFromSession ? parseInt(JSON.parse(dataFromSession), 10) : parseInt(value, 10);
     }
     const [modelSize, setModelSize] = useState("large-v3");
-    const [modelList, setModelList] = useState([]);
+    const [availableMemory, setAvailableMemory] = useState(16.0);
     const [language, setLanguage] = useState(getInitialString("language", "auto"))
     const micBoostLevel = useRef(getInitialInteger("micBoostLevel", 1))
     const [recording, setRecording] = useState(false);
@@ -61,6 +61,14 @@ const App = () => {
     const chunkInventoryRef = useRef(new Map());
     const [error, setError] = useState(null);
     const [showMicTestOverlay, setShowMicTestOverlay] = useState(false);
+
+    const WHISPER_MODELS = {
+        "base": 1.0,
+        "small": 2.0,
+        "medium": 5.0,
+        "large-v3": 10.0,
+        "large-v3-turbo": 6.0,
+    }
 
     // Determine protocol (ws or wss) based on the page's protocol (http or https)
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -129,23 +137,17 @@ const App = () => {
         setError(new Error("Server communication error detected. Please check your connection."));
     }
 
-    // Function to determine the best default model based on availability and preference order.
-    const getDefaultModel = (list) => {
-        const preferenceOrder = ["large-v3", "large-v3-turbo", "medium", "small", "base"];
-        const availableModels = list.map(modelStr => {
-            const [modelName] = modelStr.split(' ');
-            const isDisabled = modelStr.includes("(not enough memory)");
-            return { name: modelName, disabled: isDisabled };
-        });
+    /**
+     * Determines the best default model based on available memory.
+     * It returns the name of the largest model that fits the memory constraints.
+     */
+    const getDefaultModel = (availableMemory) => {
+        const fittingModels = Object.entries(WHISPER_MODELS)
+            .filter(([_, memoryReq]) => memoryReq <= availableMemory)
+            .sort(([, memA], [, memB]) => memB - memA); // Sort by memory descending
 
-        for (const preferredModel of preferenceOrder) {
-            const model = availableModels.find(m => m.name === preferredModel);
-            if (model && !model.disabled) {
-                return model.name;
-            }
-        }
-        // Fallback to the first available model if no preferred models are available
-        return availableModels.find(m => !m.disabled)?.name || '';
+        // Return the name of the largest fitting model, or the most common if no models fit
+        return fittingModels.length > 0 ? fittingModels[0][0] : 'large-v3';
     };
 
     const receiveMessage = async (message) => {
@@ -200,13 +202,17 @@ const App = () => {
                         } else {
                             console.debug("No initialization recording data returned.");
                         }
-                        if (data.model_list && data.model_list.length > 0) {
-                            // update the list of whisper models
-                            //console.debug(data.model_list)
-                            setModelSize(getDefaultModel(data.model_list))
-                            setModelList(data.model_list);
+                        // get the size of the available memory
+                        const memory = data.available_memory;
+                        console.debug('Available memory:', memory);
+                        if (memory && !isNaN(parseFloat(memory))) {
+                            const memoryParsed = parseFloat(memory);
+                            setAvailableMemory(memoryParsed);
+                            setModelSize(getDefaultModel(memoryParsed));
                         } else {
-                            console.debug("No whisper models returned.");
+                            console.debug("Unable to parse available memory as float value. Defaulting to 16.0 GB.")
+                            setAvailableMemory(16.0);
+                            setModelSize("large-v3");
                         }
                         break;
                     case "ack_start_recording":
@@ -852,9 +858,10 @@ const App = () => {
                                     <Settings
                                         onUpdateModel={onUpdateModel}
                                         currentModelSize={modelSize}
+                                        availableMemory={availableMemory}
+                                        whisperModels={WHISPER_MODELS}
                                         onUpdateLanguage={onUpdateLanguage}
                                         currentLanguage={language}
-                                        modelList={modelList}
                                     />
                                 )
                             }
