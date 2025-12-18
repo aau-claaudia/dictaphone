@@ -907,7 +907,7 @@ const App = () => {
                         }
                     </div>
                     <div className="section-navigation">
-                        <button className="navigation-buttons" onClick={goToPreviousSection}
+                        <button className="btn-small" onClick={goToPreviousSection}
                                 disabled={currentSection === 0}>
                             Previous
                         </button>
@@ -934,7 +934,7 @@ const App = () => {
                                 </div>
                             )}
                         </div>
-                        <button className="navigation-buttons" onClick={goToNextSection}
+                        <button className="btn-small" onClick={goToNextSection}
                                 disabled={currentSection === sections.length - 1}>
                             Next
                         </button>

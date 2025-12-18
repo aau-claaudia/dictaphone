@@ -170,6 +170,7 @@ h1 {
 
 .transcribe-stop-button:disabled {
   background-color: #adb5bd; /* Light grey for disabled state */
+  cursor: not-allowed; /* Indicate the button is not clickable */
 }
 
 .transcribe-stop-button:focus {
@@ -212,6 +213,7 @@ h1 {
 
 .transcribe-button:disabled {
   background-color: #2b542c;
+  cursor: not-allowed; /* Indicate the button is not clickable */
 }
 
 .transcribe-button:focus {
@@ -305,10 +307,6 @@ h1 {
 
   /* Changes the mouse cursor to a 'help' icon (a question mark) on hover. */
   cursor: help;
-}
-
-.navigation-buttons:hover {
-  cursor: pointer;
 }
 
 /* Styles for the buttons */
