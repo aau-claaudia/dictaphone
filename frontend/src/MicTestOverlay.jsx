@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import './MicTestOverlay.css';
 
 const MAX_TEST_RECORDING_DURATION_MS = 10000; // Max duration for a single test recording (10 seconds)
 const DEFAULT_BOOST_OPTIONS = [1, 2, 3, 5, 10, 20];
@@ -226,51 +227,43 @@ const MicTestOverlay = ({ mediaStream, initialMicBoostLevel, onSave, onClose }) 
         onClose();
     };
 
+    // Helper to determine the color of the audio level bar
+    const getLevelBarColorClass = (level) => {
+        if (level > 0.7) return 'level-high';
+        if (level > 0.4) return 'level-medium';
+        return 'level-low';
+    };
+
     return (
-        <div style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.7)', display: 'flex',
-            justifyContent: 'center', alignItems: 'center', zIndex: 500
-        }}>
-            <div style={{
-                backgroundColor: 'white', padding: '20px', borderRadius: '8px',
-                width: '450px', boxShadow: '0 4px 8px rgba(0,0,0,0.2)'
-            }}>
+        <div className="mic-test-overlay">
+            <div className="mic-test-modal">
                 <h2>Microphone Test</h2>
 
-                <div>
-                    <label htmlFor="micBoost" style={{display: 'block', marginBottom: '5px'}}>Microphone amplification
-                        level</label>
+                <div className="mic-test-form-group">
+                    <label htmlFor="micBoost" className="mic-test-label">Microphone amplification level</label>
                     <select
                         id="micBoost"
                         value={currentMicBoostLevel}
                         onChange={handleMicBoostChange}
-                        style={{width: '100%', padding: '8px', borderRadius: '4px'}}
+                        className="mic-test-select"
                         disabled={isTesting || isPlaybackActive}
                     >
-                        {DEFAULT_BOOST_OPTIONS.map(level => (
-                            <option key={level} value={level}>
-                                {level}x
-                            </option>
-                        ))}
+                        {DEFAULT_BOOST_OPTIONS.map(level => (<option key={level} value={level}>{level}x</option>))}
                     </select>
                 </div>
 
-                <div style={{marginTop: '15px'}}>
+                <div className="mic-test-level-container">
                     <p>Input Level: {Math.round(audioInputLevel * 100)}%</p>
-                    <div style={{
-                        height: '10px', backgroundColor: '#eee', borderRadius: '5px',
-                        overflow: 'hidden'
-                    }}>
-                        <div style={{
-                            width: `${audioInputLevel * 100}%`, height: '100%',
-                            backgroundColor: audioInputLevel > 0.7 ? 'red' : (audioInputLevel > 0.4 ? 'orange' : 'green')
-                        }}></div>
+                    <div className="mic-test-level-bar-bg">
+                        <div
+                            className={`mic-test-level-bar-fg ${getLevelBarColorClass(audioInputLevel)}`}
+                            style={{ width: `${audioInputLevel * 100}%` }}
+                        ></div>
                     </div>
                 </div>
 
-                <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                <div className="mic-test-button-container">
+                    <div className="mic-test-button-group">
                         <button className="btn-small" onClick={handleStartStopTest} disabled={isPlaybackActive}>
                             {isTesting ? "Stop Test" : "Start Test"}
                         </button>
@@ -278,7 +271,7 @@ const MicTestOverlay = ({ mediaStream, initialMicBoostLevel, onSave, onClose }) 
                             Play Back
                         </button>
                     </div>
-                    <div style={{ display: 'flex', gap: '10px' }}>
+                    <div className="mic-test-button-group">
                         <button className="btn-small" onClick={handleSave} disabled={isTesting || isPlaybackActive}>Save & Close</button>
                         <button className="btn-small" onClick={onClose} disabled={isTesting || isPlaybackActive}>Close</button>
                     </div>

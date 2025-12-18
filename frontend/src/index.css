@@ -431,7 +431,7 @@ a.button:hover {
   /* Show the list and style it as cards */
   .transcription-files-list {
     display: block;
-    max-width: 300px; /* As you requested */
+    max-width: 300px;
     margin: 0 auto; /* Center the container */
   }
 
