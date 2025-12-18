@@ -83,8 +83,7 @@
 /* --- Responsive Styles for Small Screens --- */
 @media (max-width: 600px) {
     .mic-test-modal {
-        /* Reduce horizontal padding on smaller screens */
-        padding: 25px 20px;
+        padding: 25px 20px; /* Reduce horizontal padding on smaller screens */
         max-width: 300px;
     }
 

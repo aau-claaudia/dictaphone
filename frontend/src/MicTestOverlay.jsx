@@ -4,7 +4,7 @@ import './MicTestOverlay.css';
 const MAX_TEST_RECORDING_DURATION_MS = 10000; // Max duration for a single test recording (10 seconds)
 const DEFAULT_BOOST_OPTIONS = [1, 2, 3, 5, 10, 20];
 
-const MicTestOverlay = ({ mediaStream, initialMicBoostLevel, onSave, onClose }) => { // True when recording
+const MicTestOverlay = ({ mediaStream, initialMicBoostLevel, onSave, onClose }) => {
     const [isTesting, setIsTesting] = useState(false);
     const [isPlaybackActive, setIsPlaybackActive] = useState(false);
     const [currentMicBoostLevel, setCurrentMicBoostLevel] = useState(initialMicBoostLevel || 1.0);
@@ -70,7 +70,7 @@ const MicTestOverlay = ({ mediaStream, initialMicBoostLevel, onSave, onClose }) 
         return () => cleanupAudio();
     }, [setupAudio, cleanupAudio]);
 
-    // --- Recording Logic for Test ---
+    // --- Recording Logic for running microphone test ---
     const startTestRecording = useCallback(() => {
         if (!mediaStream || !audioContextRef.current || !gainNodeRef.current || mediaRecorderRef.current?.state === 'recording') {
             console.warn("Audio components not ready or already recording for test.");
