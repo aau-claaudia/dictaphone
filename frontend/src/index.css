@@ -430,10 +430,9 @@ a.button:hover {
   border-bottom: 2px solid darkgreen;
 }
 
-.title-edit-button,
-.title-save-button,
-.title-cancel-button {
+.title-edit-button {
   position: absolute;
+  right: 5px;
   background: none;
   border: none;
   cursor: pointer;
@@ -442,17 +441,7 @@ a.button:hover {
   line-height: 1;
   /* Center the icon vertically */
   top: 50%;
-  transform: translateY(-65%);
-}
-.title-edit-button {
-  right: 5px;
-}
-.title-save-button {
-  right: 28px;
-}
-.title-cancel-button {
-  background-color: red;
-  right: 5px;
+  transform: translateY(-70%);
 }
 
 

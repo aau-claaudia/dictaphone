@@ -887,13 +887,13 @@ const App = () => {
                             )}
                             {isEditingTitle && (
                                 <div>
-                                    <button className="title-save-button btn-small" onClick={() => handleSaveTitle(currentSection)}
-                                            title="Save title">
-                                        save
+                                    <button className="btn-small" onClick={() => handleSaveTitle(currentSection)}
+                                        title="Save title">
+                                        Save
                                     </button>
-                                    <button className="title-cancel-button btn-small" onClick={() => handleCancelTitle()}
+                                    <button className="btn-small" onClick={() => handleCancelTitle()}
                                         title="Cancel">
-                                        cancel
+                                        Cancel
                                     </button>
                                 </div>
                             )}
