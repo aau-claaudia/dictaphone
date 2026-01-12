@@ -1,6 +1,6 @@
-import React, {useEffect, useRef, useState} from "react";
+import React, {useEffect, useRef, useState, useLayoutEffect} from "react";
 import {MediaRecorder, register} from 'extendable-media-recorder';
-import {connect} from 'extendable-media-recorder-wav-encoder';
+import {connect, record} from 'extendable-media-recorder-wav-encoder';
 import Settings from "./Settings.jsx";
 import Results from "./Results.jsx";
 import ErrorOverlay from "./Overlay.jsx";
@@ -37,13 +37,14 @@ const App = () => {
     const [sections, setSections] = useState([
         {
             title: "Recording 1",
+            lastSavedTitle: "Recording 1",
+            titleUpdateInfoText: null,
             recordingId: null,
             isRecording: false,
             isInitiating: false,
             audioLevel: 0,
             duration: 0,
             animationFrameId: null,
-            titleLocked: false,
             audioUrl: null,
             audioPath: null,
             size: null,
@@ -64,6 +65,7 @@ const App = () => {
     const [showMicTestOverlay, setShowMicTestOverlay] = useState(false);
     const [showSectionList, setShowSectionList] = useState(false);
     const dropdownRef = useRef(null);
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
 
     const WHISPER_MODELS = {
         "base": 1.0,
@@ -118,6 +120,30 @@ const App = () => {
     useEffect(() => {
         sessionStorage.setItem("language", JSON.stringify(language))
     }, [language]);
+
+    const inputRef = useRef(null); // for controlling the input field for recording name
+
+    useEffect(() => {
+        // when isEditingTitle becomes true, focus the input field so the user can start to edit
+        if (isEditingTitle && inputRef.current) {
+            inputRef.current.focus();
+            //inputRef.current.select(); select all text so the user can type over it immediately
+        }
+    }, [isEditingTitle]); // Dependency array ensures this runs when isEditingTitle changes
+
+    const adjustInputWidth = (inputElement) => {
+        if (inputElement) {
+            //console.debug("Input element:", inputElement);
+            inputElement.style.width = '0px';
+            inputElement.style.width = `${inputElement.scrollWidth + 15}px`;
+        }
+    };
+
+    // This runs synchronously after DOM mutations, preventing visual flicker
+    useLayoutEffect(() => {
+        adjustInputWidth(inputRef.current);
+    }, [currentSection]); // update the size of the input field when the section changes
+
 
     useEffect(() => {
         const handleClickOutside = (event) => {
@@ -195,13 +221,14 @@ const App = () => {
                                 }
                                 let sectionObject = {
                                     title: item.title,
+                                    lastSavedTitle: item.title,
+                                    titleUpdateInfoText: null,
                                     recordingId: item.recording_id,
                                     isRecording: false,
                                     isInitiating: false,
                                     audioLevel: 0,
                                     duration: 0,
                                     animationFrameId: null,
-                                    titleLocked: true,
                                     audioUrl: item.recording_file_path,
                                     audioPath: null,
                                     size: fileSize,
@@ -469,13 +496,14 @@ const App = () => {
                 ...prevSections,
                 {
                     title: `Recording ${prevSections.length + 1}`,
+                    lastSavedTitle: `Recording ${prevSections.length + 1}`,
+                    titleUpdateInfoText: null,
                     recordingId: null,
                     isRecording: false,
                     isInitiating: false,
                     audioLevel: 0,
                     duration: 0,
                     animationFrameId: null,
-                    titleLocked: false,
                     audioUrl: null,
                     audioPath: null,
                     size: null,
@@ -499,7 +527,8 @@ const App = () => {
         setSections(updatedSections);
         // Dynamically adjust the input width
         const inputElement = e.target;
-        inputElement.style.width = `${Math.max(inputElement.value.length * 0.6, 10)}em`;
+        inputElement.style.width = '0px'; // need to reset to 0px first to get the right width below
+        inputElement.style.width = `${inputElement.scrollWidth + 15}px`;
     };
 
     const initiateRecording = async (index) => {
@@ -523,7 +552,7 @@ const App = () => {
         }
     }
 
-    const initiateMicTest = async (index) => {
+    const initiateMicTest = async () => {
         let streamInstance;
         try {
             // Request access to the microphone
@@ -552,6 +581,7 @@ const App = () => {
             }
         })
         setSections(updatedSections);
+        setShowSettings(false);
         // send control message to backend
         sendControlMessage("start_transcription", {
             recordingId: recordingId,
@@ -589,8 +619,6 @@ const App = () => {
         updatedSections[index].isRecording = true;
         updatedSections[index].recordingId = updatedRecordingId;
         updatedSections[index].startTime = Date.now(); // Record the start time
-        // Lock the title so that the file name can be used for file processing with backend
-        updatedSections[index].titleLocked = true;
         updatedSections[index].isInitiating = false;
         setSections(updatedSections);
 
@@ -760,6 +788,70 @@ const App = () => {
         setShowMicTestOverlay(false);
     };
 
+    const revertTitleUpdate = (index, infoText) => {
+        const updatedSections = [...sectionsRef.current];
+        updatedSections[index].title = updatedSections[index].lastSavedTitle;
+        updatedSections[index].titleUpdateInfoText = infoText;
+        const inputElement = inputRef.current;
+        inputElement.value = updatedSections[index].lastSavedTitle;
+        inputElement.style.width = '0px'; // need to reset to 0px first to get the right width below
+        inputElement.style.width = `${inputElement.scrollWidth + 15}px`;
+
+        // update the section data lastly to redraw the UI with the updated title
+        setSections(updatedSections);
+        setIsEditingTitle(false);
+    };
+
+    const handleCancelTitle = () => {
+        setIsEditingTitle(false);
+    }
+
+    const handleSaveTitle = (index) => {
+        if (recording || sections[index].transcribing) {
+            // extra safeguard, the UI is designed not to allow this
+            const updatedSections = [...sectionsRef.current];
+            updatedSections[index].titleUpdateInfoText = "Cannot rename during recording or transcribing.";
+            setSections(updatedSections);
+            setIsEditingTitle(false);
+            return;
+        }
+
+        const currentTitle = sections[index].title.trim();
+        const lastSavedTitle = [...sectionsRef.current][index].lastSavedTitle;
+
+        // Check for empty title
+        if (currentTitle === "") {
+            const infoText = "The title cannot be empty.";
+            revertTitleUpdate(index, infoText);
+            return;
+        }
+
+        // Check for same title
+        if (currentTitle === lastSavedTitle) {
+            setIsEditingTitle(false);
+            return;
+        }
+
+        // Check for duplicate title
+        const isDuplicate = sections.some((section, i) => i !== index && section.title.trim() === currentTitle);
+        if (isDuplicate) {
+            const infoText = `Title name \`${currentTitle}\` already exists.`;
+            revertTitleUpdate(index, infoText);
+            return;
+        }
+
+        // TODO: update section, info tekst, lastSaved...
+        setIsEditingTitle(false);
+
+        // TODO:
+        // if existing recording, send rename to server, update text with rename successful or failed
+        // if no recording yet just rename
+    };
+
+    const handleEditTitle = (index) => {
+        setIsEditingTitle(true);
+    };
+
     return (
         <div className='App'>
             <ErrorOverlay
@@ -772,33 +864,64 @@ const App = () => {
             <div>
                 <div className="recording-section">
                     <div className="recording-header">
-                        <input
-                            type="text"
-                            value={sections[currentSection].title}
-                            onChange={(e) => handleTitleChange(e, currentSection)}
-                            className="section-title-input"
-                            maxLength="30" // Limit to 30 characters
-                            placeholder="Enter title"
-                            disabled={sections[currentSection].titleLocked}
-                        />
+                        <div className="title-input-container">
+                            <input
+                                ref={inputRef}
+                                type="text"
+                                value={sections[currentSection].title}
+                                onChange={(e) => handleTitleChange(e, currentSection)}
+                                className="section-title-input"
+                                maxLength="30" // Limit to 30 characters
+                                placeholder="Enter title"
+                                disabled={!isEditingTitle}
+                            />
+                            {!sections[currentSection].isRecording && !isEditingTitle && (
+                                <button
+                                    className="title-edit-button"
+                                    onClick={() => handleEditTitle(currentSection)}
+                                    title="Edit title"
+                                    hidden={sections[currentSection].isRecording || sections[currentSection].transcribing}
+                                >
+                                    ✏️
+                                </button>
+                            )}
+                            {isEditingTitle && (
+                                <div>
+                                    <button className="title-save-button btn-small" onClick={() => handleSaveTitle(currentSection)}
+                                            title="Save title">
+                                        save
+                                    </button>
+                                    <button className="title-cancel-button btn-small" onClick={() => handleCancelTitle()}
+                                        title="Cancel">
+                                        cancel
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                         <button className="add-section-button" onClick={addSection} title="Add new recording"
-                                disabled={recording || sections[currentSection].isInitiating || sections[currentSection].finalizing}>
+                                disabled={recording || sections[currentSection].isInitiating || sections[currentSection].finalizing || isEditingTitle}>
                             +
                         </button>
                     </div>
+                    {sections[currentSection].titleUpdateInfoText && (
+                        <div>
+                            {sections[currentSection].titleUpdateInfoText}
+                        </div>
+                    )}
                     <div className="recording-content">
                         <button className="transcribe-button" onClick={() => initiateRecording(currentSection)}
-                                disabled={recording || sections[currentSection].audioUrl || sections[currentSection].isInitiating || sections[currentSection].finalizing}>
+                                disabled={recording || sections[currentSection].audioUrl || sections[currentSection].isInitiating || sections[currentSection].finalizing || isEditingTitle}>
                             {recording ? (sections[currentSection].isInitiating ? 'Initiating' : 'Recording') : 'Start recording'}
                         </button>
                         <button className="transcribe-stop-button" onClick={() => stopRecording(currentSection, true)}
                                 disabled={!sections[currentSection].isRecording}>
                             {sections[currentSection].finalizing ? 'Verifying recording' : 'Stop recording'}
                         </button>
-                        <button className="transcribe-button" onClick={showOrHideRecordingSettings}>
+                        <button className="transcribe-button" onClick={showOrHideRecordingSettings}
+                                disabled={isEditingTitle}>
                             {showRecordingSettings ? 'Hide settings' : 'Show settings'}
                         </button>
-                        <button className="transcribe-button" onClick={initiateMicTest} disabled={recording}>
+                        <button className="transcribe-button" onClick={initiateMicTest} disabled={recording || isEditingTitle}>
                             Test Microphone
                         </button>
                         {
@@ -866,15 +989,16 @@ const App = () => {
                         <div style={{marginTop: 10}}>
                             <button className="transcribe-button"
                                     onClick={() => startTranscription(sections[currentSection].recordingId)}
-                                    disabled={sections[currentSection].isRecording || !sections[currentSection].audioUrl || sections[currentSection].transcribing}>
+                                    disabled={sections[currentSection].isRecording || !sections[currentSection].audioUrl || sections[currentSection].transcribing || isEditingTitle}>
                                 {sections[currentSection].transcribing ? 'In progress' : 'Transcribe recording'}
                             </button>
                             <button className="transcribe-stop-button"
                                     onClick={() => cancelTranscription(sections[currentSection].recordingId)}
-                                    disabled={!sections[currentSection].transcribing || !sections[currentSection].taskId}>
+                                    disabled={!sections[currentSection].transcribing || !sections[currentSection].taskId || isEditingTitle}>
                                 Cancel transcription
                             </button>
-                            <button className="transcribe-button" onClick={showOrHideSettings}>
+                            <button className="transcribe-button" onClick={showOrHideSettings}
+                                    disabled={isEditingTitle}>
                                 {showSettings ? 'Hide settings' : 'Show settings'}
                             </button>
                             {
@@ -908,7 +1032,7 @@ const App = () => {
                     </div>
                     <div className="section-navigation">
                         <button className="btn-small" onClick={goToPreviousSection}
-                                disabled={currentSection === 0}>
+                                disabled={currentSection === 0 || isEditingTitle}>
                             Previous
                         </button>
                         <div className="dropdown-container" ref={dropdownRef}>
@@ -925,8 +1049,11 @@ const App = () => {
                                 <div className="dropdown-menu">
                                     <ul className="dropdown-list">
                                         {sections.map((section, index) => (
-                                            <li key={index} onClick={() => handleSectionSelect(index)}
-                                                className="section-list-item">
+                                            <li key={index}
+                                                onClick={() => !isEditingTitle && handleSectionSelect(index)}
+                                                className="section-list-item"
+                                                style={isEditingTitle ? {opacity: 0.5, cursor: 'not-allowed'} : {}}
+                                            >
                                                 {section.title}
                                             </li>
                                         ))}
@@ -935,7 +1062,7 @@ const App = () => {
                             )}
                         </div>
                         <button className="btn-small" onClick={goToNextSection}
-                                disabled={currentSection === sections.length - 1}>
+                                disabled={currentSection === sections.length - 1 || isEditingTitle}>
                             Next
                         </button>
                     </div>

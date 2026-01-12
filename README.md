@@ -55,7 +55,7 @@ nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev --host
 ## Checkout and install the transcriber Python application
 ``` bash
 cd dictaphone
-git clone --depth 1 --single-branch --recursive --shallow-submodules -b "V1.14" https://github.com/aau-claaudia/transcriber.git aau-whisper
+git clone --depth 1 --single-branch --recursive --shallow-submodules -b "V1.15" https://github.com/aau-claaudia/transcriber.git aau-whisper
 cd aau-whisper
 pip install -r requirements.txt
 pip install -e .
