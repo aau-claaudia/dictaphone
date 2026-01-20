@@ -11,6 +11,7 @@ import logging
 from enum import Enum
 from .tasks import transcription_task
 from .model_memory_util import calculate_available_memory
+from .data_rename_util import safe_rename
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +208,54 @@ class AudioChunkManager:
                 })
                 break
 
+    async def rename_title(self, recording_id, new_title) -> bool:
+        """
+        :param recording_id: the recording id
+        :param new_title: the new title for the recording
+        :return: returns true if the renaming was successful, and false otherwise
+        """
+        async with self.lock:
+            logger.info(f"Renaming title, recording_id = {recording_id} new title = {new_title}")
+            try:
+                sanitized_title = validate_linux_filename(new_title)
+                old_title = self.recordings[recording_id]['title']
+                # 1) validate the new title name
+                if not self.validate_title(sanitized_title):
+                    return False
+
+                new_recording_dir_name = (str(recording_id) + "_" + sanitized_title).replace(" ", "_")
+                new_recording_path: str = self.recording_base_path + new_recording_dir_name
+
+                # 2) rename the .wav file
+                new_recording_file_path = os.path.join(self.recordings[recording_id]['recording_path'], sanitized_title + ".wav")
+                try:
+                    safe_rename(self.recordings[recording_id]['recording_file_path'], new_recording_file_path)
+                except (ValueError, OSError) as e:
+                    logger.error(f"Error renaming title, aborting. Error: {e}")
+                    return False
+
+                # 3) rename files and data in the transcriptions directory
+                # if there is a TRANSCRIPTIONS dir
+
+                # 4) rename the top level folder
+                try:
+                    safe_rename(self.recordings[recording_id]['recording_path'], new_recording_path)
+                except (ValueError, OSError) as e:
+                    logger.error(f"Error renaming title, aborting. Error: {e}")
+                    return False
+                # rename wav path in recordings data structure after folder rename
+                new_recording_file_path = os.path.join(new_recording_path, sanitized_title + ".wav")
+
+                # 5) update the title, recording_path and recording_file_path in the recordings data structure
+                self.recordings[recording_id]['title'] = sanitized_title
+                self.recordings[recording_id]['recording_path'] = new_recording_path
+                self.recordings[recording_id]['recording_file_path'] = new_recording_file_path
+
+                return True
+            except Exception as e:
+                logger.error(f"Error while renaming title: {e}")
+                return False
+
     def get_file_path(self, recording_id) -> str:
         return self.recordings[recording_id]['recording_file_path']
 
@@ -237,10 +286,13 @@ class AudioChunkManager:
 
     def get_dirname(self, title) -> str:
         # Not empty and does not contain any of these: <>:"/\|?* or whitespace at ends
-        if bool(title) and not re.search(r'[<>:"/\\|?*\0]', title) and title == title.strip():
+        if self.validate_title(title):
             return (str(self.active_recording_id) + "_" + title).replace(" ", "_")
         else:
             return str(self.active_recording_id)
+
+    def validate_title(self, title):
+        return bool(title) and not re.search(r'[<>:"/\\|?*\0]', title) and title == title.strip()
 
     def set_active_recording_id(self, recording_id: int):
         # method used for setting up tests
@@ -282,7 +334,11 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
 
             # Extract the title from the directory name (e.g., "1_My_Title" -> "My_Title")
             parts = item_name.split('_', 1)
-            title = parts[1] if len(parts) > 1 else item_name
+            if len(parts) > 1:
+                title = parts[1]
+            else:
+                logger.warning("Malformed directory name, skipping.")
+                continue
             log_path = os.path.join(recording_dir, "completion_log.txt")
             wav_path = os.path.join(recording_dir, title + ".wav")
             # get transcription file links
@@ -399,6 +455,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         initialize
         start_transcription
         cancel_transcription
+        rename_recording
 
         :param text_data: control messages from the client
         :param bytes_data: binary audio data from the client
@@ -455,6 +512,14 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     task_id = param_object.get("taskId")
                     logger.info(f"Received cancel_transcription control message, taks ID: {task_id}")
                     await self.cancel_transcription_task(task_id)
+                elif data.get("message") == "rename_recording":
+                    logger.info("Received rename_recording control message.")
+                    param_object = data.get("parameter")
+                    recording_id = param_object.get("recordingId")
+                    new_title = param_object.get("newTitle")
+                    logger.info(f"Title rename params: {recording_id}, {new_title}")
+                    # start title rename and send back status, success/failed
+                    await self.handle_rename(recording_id, new_title)
                 else:
                     logger.info("Unknown control message")
         elif bytes_data is not None:
@@ -565,6 +630,16 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
 
     async def send_to_client(self, json_object):
         await self.send(text_data=json.dumps(json_object))
+
+    async def handle_rename(self, recording_id, new_title):
+        logger.info(f"Starting title rename task for recording {recording_id} and new title {new_title}")
+        rename_successful = await self.chunk_manager.rename_title(recording_id, new_title)
+        await self.send(text_data=json.dumps({
+            "message_type": "rename_complete",
+            "success": rename_successful,
+            "recording_id": recording_id,
+            "new_title": new_title,
+        }))
 
     async def start_transcription_task(self, recording_id, model, language):
         # Start the server monitoring

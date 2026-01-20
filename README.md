@@ -17,7 +17,7 @@ pip install django django-cors-headers django-rest-framework celery redis channe
 
 ## npm packages needed
 ``` bash
-npm install extendable-media-recorder extendable-media-recorder-wav-encoder
+npm install extendable-media-recorder extendable-media-recorder-wav-encoder react-spinners
 ```
 
 ## npm package for testing the app on mobile phones (https needed)

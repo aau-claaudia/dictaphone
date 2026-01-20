@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import './MicTestOverlay.css';
+import './OverlayInteractive.css'
 
 const MAX_TEST_RECORDING_DURATION_MS = 10000; // Max duration for a single test recording (10 seconds)
 const DEFAULT_BOOST_OPTIONS = [1, 2, 3, 5, 10, 20];
@@ -235,8 +236,8 @@ const MicTestOverlay = ({ mediaStream, initialMicBoostLevel, onSave, onClose }) 
     };
 
     return (
-        <div className="mic-test-overlay">
-            <div className="mic-test-modal">
+        <div className="interactive-overlay">
+            <div className="interactive-modal-overlay">
                 <h2>Microphone Test</h2>
 
                 <div className="mic-test-form-group">
