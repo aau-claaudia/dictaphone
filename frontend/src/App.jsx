@@ -358,13 +358,15 @@ const App = () => {
                         console.debug("Recording ID:", data.recording_id);
                         console.debug("Success:", data.success);
                         console.debug("New title:", data.new_title);
+                        console.debug("Audio url:", data.audio_url);
+                        console.debug("Results:", data.results);
 
                         if (data.success) {
                             console.debug("Title renaming completed.");
-                            saveTitleAndClearOverlay(editingIndexRef.current, data.new_title);
+                            saveTitleAndClearOverlay(editingIndexRef.current, data.new_title, data.audio_url, data.results);
                         } else {
                             console.debug("Server error when renaming title.");
-                            setError(new Error("Server error during title renaming. Try to refresh the connection to the server."));
+                            setError(new Error("Server error during title renaming. Please refresh the browser window."));
                         }
                         break;
                     }
@@ -807,15 +809,21 @@ const App = () => {
                 newTitle: value
             });
         } else {
-            saveTitleAndClearOverlay(index, value);
+            saveTitleAndClearOverlay(index, value, null, null);
         }
     };
 
-    const saveTitleAndClearOverlay = (index, value) => {
+    const saveTitleAndClearOverlay = (index, value, audioUrl, results) => {
         const updatedSections = [...sectionsRef.current];
         // update title and clear overlay
         updatedSections[index].title = value;
         updatedSections[index].lastSavedTitle = value;
+        if (audioUrl) {
+            updatedSections[index].audioUrl = audioUrl;
+        }
+        if (results){
+            updatedSections[index].transcriptionResults = results;
+        }
         setIsEditingTitle(false);
         editingIndexRef.current = null;
         setCurrentSection(index);
@@ -1023,7 +1031,7 @@ const App = () => {
                             editingIndex={editingIndexRef.current}
                             sectionsRef={sectionsRef}
                             renameTitle={renameTitle}
-                            cancelEditTItle={cancelEditTitle}
+                            cancelEditTitle={cancelEditTitle}
                         />
                     )}
                 </div>

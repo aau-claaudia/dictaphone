@@ -42,8 +42,3 @@
         max-width: 300px;
     }
 }
-
-/* --- Responsive Styles for Small Screens --- */
-@media (max-width: 600px) {
-    /* TODO styling for mobile device */
-}

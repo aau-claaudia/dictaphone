@@ -1,12 +1,14 @@
 import React, {useEffect, useState} from 'react';
 import './EditTitleOverlay.css';
 import './OverlayInteractive.css';
+import RecordingInfo from "./RecordingInfo.jsx";
 
-const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTItle }) => {
+const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTitle }) => {
     const [titleValue, setTitleValue] = useState(null);
     const [infoText, setInfoText] = useState(null);
     const [lastSavedTitle, setLastSavedTitle] = useState(null);
     const [renamingInProgress, setRenamingInProgress] = useState(false);
+    const [audioUrl, setAudioUrl] = useState(null);
 
     useEffect(() => {
         // Initialize data from sections property on component load
@@ -27,9 +29,10 @@ const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTI
             console.warn("No lastSavedTitle.");
             setLastSavedTitle("");
         }
+        setAudioUrl(sectionToUpdate.audioUrl);
     }, []);
 
-    const handleSaveTitle = (event) => {
+    const handleSaveTitle = () => {
         if (validateTitle()) {
             setRenamingInProgress(true);
             setInfoText("Renaming in progress...");
@@ -38,7 +41,7 @@ const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTI
     };
 
     const handleCancelEditTitle = () => {
-        cancelEditTItle();
+        cancelEditTitle();
     };
 
     const handleTitleValueChange = (e) => {
@@ -71,6 +74,10 @@ const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTI
         <div className="interactive-overlay">
             <div className="interactive-modal-overlay">
                 <h2>Edit title</h2>
+                <RecordingInfo
+                    audioUrl={audioUrl}
+                    lastSavedTitle={lastSavedTitle}
+                />
                 <input
                     type="text"
                     className="edit-title-input"

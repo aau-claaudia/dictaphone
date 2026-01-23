@@ -11,7 +11,7 @@ import logging
 from enum import Enum
 from .tasks import transcription_task
 from .model_memory_util import calculate_available_memory
-from .data_rename_util import safe_rename
+from .data_rename_util import safe_rename, proces_transcription_data_for_title_rename
 
 logger = logging.getLogger(__name__)
 
@@ -217,14 +217,16 @@ class AudioChunkManager:
         async with self.lock:
             logger.info(f"Renaming title, recording_id = {recording_id} new title = {new_title}")
             try:
-                sanitized_title = validate_linux_filename(new_title)
-                old_title = self.recordings[recording_id]['title']
+                sanitized_title = validate_linux_filename(new_title).replace(" ", "_")
+                old_title = self.recordings[recording_id]['title'].replace(" ", "_")
                 # 1) validate the new title name
                 if not self.validate_title(sanitized_title):
                     return False
-
-                new_recording_dir_name = (str(recording_id) + "_" + sanitized_title).replace(" ", "_")
-                new_recording_path: str = self.recording_base_path + new_recording_dir_name
+                if sanitized_title == old_title:
+                    # trying to rename to existing title
+                    logger.info("Trying to rename title to existing title.")
+                    self.recordings[recording_id]['title'] = sanitized_title
+                    return True
 
                 # 2) rename the .wav file
                 new_recording_file_path = os.path.join(self.recordings[recording_id]['recording_path'], sanitized_title + ".wav")
@@ -235,9 +237,12 @@ class AudioChunkManager:
                     return False
 
                 # 3) rename files and data in the transcriptions directory
-                # if there is a TRANSCRIPTIONS dir
+                transcriptions_dir = os.path.join(self.recordings[recording_id]['recording_path'], 'TRANSCRIPTIONS/')
+                proces_transcription_data_for_title_rename(old_title, sanitized_title, transcriptions_dir)
 
                 # 4) rename the top level folder
+                new_recording_dir_name = (str(recording_id) + "_" + sanitized_title)
+                new_recording_path: str = self.recording_base_path + new_recording_dir_name
                 try:
                     safe_rename(self.recordings[recording_id]['recording_path'], new_recording_path)
                 except (ValueError, OSError) as e:
@@ -517,7 +522,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     param_object = data.get("parameter")
                     recording_id = param_object.get("recordingId")
                     new_title = param_object.get("newTitle")
-                    logger.info(f"Title rename params: {recording_id}, {new_title}")
+                    logger.info(f"Title rename params, recording ID: {recording_id}, new title: {new_title}")
                     # start title rename and send back status, success/failed
                     await self.handle_rename(recording_id, new_title)
                 else:
@@ -639,6 +644,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             "success": rename_successful,
             "recording_id": recording_id,
             "new_title": new_title,
+            "audio_url": self.chunk_manager.get_file_path(recording_id),
+            "results": prepare_results(os.path.join(self.chunk_manager.get_recording_dir_path(recording_id), 'TRANSCRIPTIONS/'))
         }))
 
     async def start_transcription_task(self, recording_id, model, language):
