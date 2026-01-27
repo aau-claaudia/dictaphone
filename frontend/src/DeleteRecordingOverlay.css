@@ -110,11 +110,17 @@
 }
 
 .edit-actions {
-    margin-top: 2%;
+    margin-top: 5%;
     margin-bottom: 2%;
     display: flex;
     justify-content: flex-end;
     gap: 3%;
+}
+
+.delete-warning {
+    color: #FF4D00;
+    margin-top: 8px;
+    font-size: 1.0em;
 }
 
 /* --- Responsive Styles for Small Screens --- TODO: adapt to small screen */

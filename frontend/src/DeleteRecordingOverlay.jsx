@@ -80,7 +80,10 @@ const DeleteRecordingOverlay = ({ deleteIndex, sectionsRef, deleteRecording, can
         <div className="interactive-overlay">
             <div className="interactive-modal-overlay">
                 <h2>Delete recording</h2>
-                <RecordingInfo audioUrl={audioUrl} lastSavedTitle={title} />
+                <RecordingInfo audioUrl={audioUrl} lastSavedTitle={title}/>
+                <div className="delete-warning">
+                    Warning: You are about to permanently delete the recording and all related files.
+                </div>
                 <div className="edit-actions">
                     <button
                         className={buttonClassName}
@@ -90,15 +93,23 @@ const DeleteRecordingOverlay = ({ deleteIndex, sectionsRef, deleteRecording, can
                         onMouseDown={startHold}
                         onMouseUp={cancelHold}
                         onMouseEnter={() => setIsHovering(true)}
-                        onMouseLeave={() => { setIsHovering(false); cancelHold(); }}
-                        onTouchStart={(e) => { e.preventDefault(); startHold(); }}
+                        onMouseLeave={() => {
+                            setIsHovering(false);
+                            cancelHold();
+                        }}
+                        onTouchStart={(e) => {
+                            e.preventDefault();
+                            startHold();
+                        }}
                         onTouchEnd={cancelHold}
                     >
                         <span className="button-text">
                             {!isFinished && (
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                     <polyline points="3 6 5 6 21 6"></polyline>
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    <path
+                                        d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                                 </svg>
                             )}
                             {isFinished ? 'Deleted' : (isHovering ? 'Hold to delete' : 'Delete')}
