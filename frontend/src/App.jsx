@@ -71,6 +71,7 @@ const App = () => {
     const editingIndexRef = useRef(null);
     const [isDeleteRecording, setIsDeleteRecording] = useState(false);
     const deleteIndexRef = useRef(null);
+    const overlayRef = useRef(null);
 
     const WHISPER_MODELS = {
         "base": 1.0,
@@ -847,15 +848,34 @@ const App = () => {
         setIsEditingTitle(false);
     }
 
-    const cancelDeleteRecording = () => {
+    const closeDeleteRecording = () => {
+        // TODO: hvad skal currentSection sættes til?
+        // TODO: opdatering af sections data i UI memory, sletning af entry i sectionsarray
+        // TODO: delete fra array på baggrund af recordingID
         deleteIndexRef.current = null;
         setIsDeleteRecording(false);
     }
 
-    const deleteRecording = () => {
-        // TODO:
-        deleteIndexRef.current = null;
-        setIsDeleteRecording(false);
+    const deleteRecording = async (index) => {
+        const updatedSections = [...sectionsRef.current];
+        if (updatedSections[index].recordingId) {
+            console.log(`Starting server deletion for recording ID: ${updatedSections[index].recordingId}`);
+            // call the backend to delete the recording content
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            // TODO: calling deleteComplete() here for testing only, call after receiving reply from server
+            deleteComplete()
+        } else {
+            // TODO: setError(...)
+        }
+    }
+
+    const deleteComplete = () => {
+        // call the forward ref function on the child component to update its UI with completed status
+        if (overlayRef.current) {
+            overlayRef.current.deletionCompleted();
+        } else {
+            console.error("The was an unexpected error when deleting recording.")
+        }
     }
 
     return (
@@ -1070,9 +1090,10 @@ const App = () => {
                     {
                         isDeleteRecording && (
                             <DeleteRecordingOverlay
+                                ref={overlayRef}
                                 deleteIndex={deleteIndexRef.current}
                                 sectionsRef={sectionsRef}
-                                cancelDeleteRecording={cancelDeleteRecording}
+                                closeDeleteRecording={closeDeleteRecording}
                                 deleteRecording={deleteRecording}
                             />
                         )

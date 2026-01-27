@@ -1,11 +1,10 @@
-import React, {useEffect, useState, useRef} from 'react';
+import React, {useEffect, useState, useRef, forwardRef, useImperativeHandle} from 'react';
 import './OverlayInteractive.css';
 import './DeleteRecordingOverlay.css';
 import RecordingInfo from "./RecordingInfo.jsx";
 
-const DeleteRecordingOverlay = ({ deleteIndex, sectionsRef, deleteRecording, cancelDeleteRecording }) => {
+const DeleteRecordingOverlay = forwardRef(({ deleteIndex, sectionsRef, deleteRecording, closeDeleteRecording }, ref) => {
     // State for the component's data
-    const [infoText, setInfoText] = useState(null);
     const [title, setTitle] = useState(null);
     const [audioUrl, setAudioUrl] = useState(null);
 
@@ -33,19 +32,23 @@ const DeleteRecordingOverlay = ({ deleteIndex, sectionsRef, deleteRecording, can
         };
     }, [deleteIndex, sectionsRef]); // Add dependencies to re-run effect if they change
 
+    // Expose a function to the parent component via the ref.
+    // This allows the parent to call `deletionCompleted()` after its async operation finishes.
+    useImperativeHandle(ref, () => ({
+        deletionCompleted: () => {
+            setIsFinished(true);
+            setDeleteInProgress(false);
+        }
+    }));
+
     const handleDeleteRecording = () => {
         setDeleteInProgress(true);
-        // This is where you would make your API call.
-        // For example: deleteRecording(deleteIndex);
-        console.log("Action triggered: Deleting recording...");
-
-        // After the API call succeeds:
-        setIsFinished(true);
-        setDeleteInProgress(false);
+        console.log("Deleting recording...");
+        deleteRecording(deleteIndex);
     };
 
-    const handleCancelDeleteRecording = () => {
-        cancelDeleteRecording();
+    const handleCloseDeleteRecording = () => {
+        closeDeleteRecording();
     };
 
     const startHold = () => {
@@ -118,20 +121,13 @@ const DeleteRecordingOverlay = ({ deleteIndex, sectionsRef, deleteRecording, can
                     </button>
                     <button
                         className="btn-small-close-from-delete"
-                        onClick={handleCancelDeleteRecording}
+                        onClick={handleCloseDeleteRecording}
                         title="Close and go back"
                         disabled={deleteInProgress}
                     >
                         Close
                     </button>
                 </div>
-                {
-                    infoText && (
-                        <div className="info-text">
-                            {infoText}
-                        </div>
-                    )
-                }
                 {
                     deleteInProgress && (
                         <div className="loader"/>
@@ -140,6 +136,6 @@ const DeleteRecordingOverlay = ({ deleteIndex, sectionsRef, deleteRecording, can
             </div>
         </div>
     );
-};
+});
 
 export default DeleteRecordingOverlay;
