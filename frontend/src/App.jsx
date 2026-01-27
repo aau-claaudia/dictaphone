@@ -10,6 +10,7 @@ import dictaphoneImage from "./assets/dictaphone_logo_690x386.png";
 import RecordingSettings from "./RecordingSettings.jsx";
 import MicTestOverlay from './MicTestOverlay';
 import EditTitleOverlay from "./EditTitleOverlay.jsx";
+import DeleteRecordingOverlay from "./DeleteRecordingOverlay.jsx";
 import "./Navigation.css";
 
 let isWavLibraryRegistered = false;
@@ -68,6 +69,8 @@ const App = () => {
     const dropdownRef = useRef(null);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const editingIndexRef = useRef(null);
+    const [isDeleteRecording, setIsDeleteRecording] = useState(false);
+    const deleteIndexRef = useRef(null);
 
     const WHISPER_MODELS = {
         "base": 1.0,
@@ -358,8 +361,8 @@ const App = () => {
                         console.debug("Recording ID:", data.recording_id);
                         console.debug("Success:", data.success);
                         console.debug("New title:", data.new_title);
-                        console.debug("Audio url:", data.audio_url);
-                        console.debug("Results:", data.results);
+                        //console.debug("Audio url:", data.audio_url);
+                        //console.debug("Results:", data.results);
 
                         if (data.success) {
                             console.debug("Title renaming completed.");
@@ -545,6 +548,8 @@ const App = () => {
             updatedSections[index].title = updatedSections[index].title.trim();
             if (updatedSections[index].title === "") {
                 updatedSections[index].title = updatedSections[index].lastSavedTitle;
+            } else {
+                updatedSections[index].lastSavedTitle = updatedSections[index].title;
             }
             setSections(updatedSections);
             sendControlMessage("start_recording", sections[currentSection].title);
@@ -799,6 +804,13 @@ const App = () => {
         setShowSectionList(false);
     };
 
+    const handleDeleteRecording = (index, e) => {
+        e.stopPropagation(); // don't propagate event to the dropdown list event handler for section navigation
+        deleteIndexRef.current = index;
+        setIsDeleteRecording(true);
+        setShowSectionList(false);
+    }
+
     const renameTitle = (index, value) => {
         // if there is no recording just update right away
         const updatedSections = [...sectionsRef.current];
@@ -833,6 +845,17 @@ const App = () => {
     const cancelEditTitle = () => {
         editingIndexRef.current = null;
         setIsEditingTitle(false);
+    }
+
+    const cancelDeleteRecording = () => {
+        deleteIndexRef.current = null;
+        setIsDeleteRecording(false);
+    }
+
+    const deleteRecording = () => {
+        // TODO:
+        deleteIndexRef.current = null;
+        setIsDeleteRecording(false);
     }
 
     return (
@@ -1015,6 +1038,14 @@ const App = () => {
                                                 >
                                                     ✏️
                                                 </button>
+                                                <button
+                                                    className="title-edit-button"
+                                                    onClick={(e) => handleDeleteRecording(index, e)}
+                                                    title="Delete recording"
+                                                    disabled={recording || section.transcribing}
+                                                >
+                                                    🗑️
+                                                </button>
                                             </li>
                                         ))}
                                     </ul>
@@ -1026,14 +1057,26 @@ const App = () => {
                             Next
                         </button>
                     </div>
-                    { isEditingTitle && (
-                        <EditTitleOverlay
-                            editingIndex={editingIndexRef.current}
-                            sectionsRef={sectionsRef}
-                            renameTitle={renameTitle}
-                            cancelEditTitle={cancelEditTitle}
-                        />
-                    )}
+                    {
+                        isEditingTitle && (
+                            <EditTitleOverlay
+                                editingIndex={editingIndexRef.current}
+                                sectionsRef={sectionsRef}
+                                renameTitle={renameTitle}
+                                cancelEditTitle={cancelEditTitle}
+                            />
+                        )
+                    }
+                    {
+                        isDeleteRecording && (
+                            <DeleteRecordingOverlay
+                                deleteIndex={deleteIndexRef.current}
+                                sectionsRef={sectionsRef}
+                                cancelDeleteRecording={cancelDeleteRecording}
+                                deleteRecording={deleteRecording}
+                            />
+                        )
+                    }
                 </div>
             </div>
         </div>

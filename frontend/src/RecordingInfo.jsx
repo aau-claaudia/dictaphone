@@ -4,7 +4,7 @@ const RecordingInfo = ({ audioUrl, lastSavedTitle }) => {
 
     return (
         <div>
-            <h3>{lastSavedTitle}</h3>
+            <h3>{lastSavedTitle ? lastSavedTitle : "Error no title"}</h3>
             {audioUrl && (
                 <audio
                     controls

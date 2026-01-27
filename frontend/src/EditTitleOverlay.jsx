@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from 'react';
-import './EditTitleOverlay.css';
 import './OverlayInteractive.css';
+import './EditTitleOverlay.css';
 import RecordingInfo from "./RecordingInfo.jsx";
 
 const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTitle }) => {
@@ -88,14 +88,14 @@ const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTi
                     autoFocus
                 />
                 <div className="edit-actions">
-                    <button className="btn-small"
+                    <button className="btn-small-edit"
                             onClick={handleSaveTitle}
                             title="Rename the title"
                             disabled={renamingInProgress}
                     >
                         Save
                     </button>
-                    <button className="btn-small"
+                    <button className="btn-small-edit"
                             onClick={handleCancelEditTitle}
                             title="Close and go back"
                             disabled={renamingInProgress}
