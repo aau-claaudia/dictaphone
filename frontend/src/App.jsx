@@ -182,6 +182,7 @@ const App = () => {
         // 3) output files: transcribed files, "transcribed_file"
         // 4) server data for initializing the app: "initialization_data"
         // 5) title rename response: rename_complete
+        // 6) recording delete response: delete_complete
         try {
             const data = JSON.parse(message.data);
             if (data.message_type) {
@@ -371,6 +372,21 @@ const App = () => {
                         } else {
                             console.debug("Server error when renaming title.");
                             setError(new Error("Server error during title renaming. Please refresh the browser window."));
+                        }
+                        break;
+                    }
+                    case "delete_complete": {
+                        // handle server response for recording delete requests
+                        console.debug("Recording delete response received from server.")
+                        console.debug("Recording ID:", data.recording_id);
+                        console.debug("Success:", data.success);
+
+                        if (data.success) {
+                            console.debug("Recording deletion completed.");
+                            deleteComplete(data.recording_id);
+                        } else {
+                            console.debug("Server error when deleting recording.");
+                            setError(new Error("Server error during recording deletion. Please refresh the browser window."));
                         }
                         break;
                     }
@@ -849,32 +865,34 @@ const App = () => {
     }
 
     const closeDeleteRecording = () => {
-        // TODO: hvad skal currentSection sættes til?
-        // TODO: opdatering af sections data i UI memory, sletning af entry i sectionsarray
-        // TODO: delete fra array på baggrund af recordingID
         deleteIndexRef.current = null;
+        overlayRef.current = null;
         setIsDeleteRecording(false);
     }
 
-    const deleteRecording = async (index) => {
+    const deleteRecording = (index) => {
         const updatedSections = [...sectionsRef.current];
         if (updatedSections[index].recordingId) {
-            console.log(`Starting server deletion for recording ID: ${updatedSections[index].recordingId}`);
+            console.debug(`Starting server deletion for recording ID: ${updatedSections[index].recordingId}`);
             // call the backend to delete the recording content
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            // TODO: calling deleteComplete() here for testing only, call after receiving reply from server
-            deleteComplete()
+            sendControlMessage("delete_recording", {
+                recordingId: updatedSections[index].recordingId
+            });
         } else {
-            // TODO: setError(...)
+            setError(new Error("UI error during recording deletion. Please refresh the browser window."));
         }
     }
 
-    const deleteComplete = () => {
-        // call the forward ref function on the child component to update its UI with completed status
+    const deleteComplete = (recordingId) => {
         if (overlayRef.current) {
+            // create a new array excluding the section with the matching recordingId
+            const updatedSections = sectionsRef.current.filter(section => section.recordingId !== recordingId);
+            setSections(updatedSections);
+            setCurrentSection(0); // show the first recording after deletion
+            // call the forward ref function on the child component to update its UI with completed status
             overlayRef.current.deletionCompleted();
         } else {
-            console.error("The was an unexpected error when deleting recording.")
+            setError(new Error("Error during recording deletion. Please refresh the browser window."));
         }
     }
 

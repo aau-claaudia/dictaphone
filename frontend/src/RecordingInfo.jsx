@@ -1,11 +1,11 @@
 import React from 'react';
 
-const RecordingInfo = ({ audioUrl, lastSavedTitle }) => {
+const RecordingInfo = ({ audioUrl, lastSavedTitle, deleteCompleted }) => {
 
     return (
         <div>
             <h3>{lastSavedTitle ? lastSavedTitle : "Error no title"}</h3>
-            {audioUrl && (
+            {audioUrl && !deleteCompleted && (
                 <audio
                     controls
                     src={audioUrl}

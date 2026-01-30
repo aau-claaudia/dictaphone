@@ -83,7 +83,11 @@ const DeleteRecordingOverlay = forwardRef(({ deleteIndex, sectionsRef, deleteRec
         <div className="interactive-overlay">
             <div className="interactive-modal-overlay">
                 <h2>Delete recording</h2>
-                <RecordingInfo audioUrl={audioUrl} lastSavedTitle={title}/>
+                <RecordingInfo
+                    audioUrl={audioUrl}
+                    lastSavedTitle={title}
+                    deleteCompleted={isFinished}
+                />
                 <div className="delete-warning">
                     Warning: You are about to permanently delete the recording and all related files.
                 </div>
@@ -115,7 +119,7 @@ const DeleteRecordingOverlay = forwardRef(({ deleteIndex, sectionsRef, deleteRec
                                         d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
                                 </svg>
                             )}
-                            {isFinished ? 'Deleted' : (isHovering ? 'Hold to delete' : 'Delete')}
+                            {isFinished ? 'Deleted' : (deleteInProgress ? 'Deleting' : (isHovering ? 'Hold to delete' : 'Delete'))}
                         </span>
                         <div className="progress-bar"></div>
                     </button>
