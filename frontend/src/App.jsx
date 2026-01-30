@@ -24,20 +24,8 @@ const App = () => {
         const dataFromSession = sessionStorage.getItem(keyname);
         return dataFromSession ? parseInt(JSON.parse(dataFromSession), 10) : parseInt(value, 10);
     }
-    const [modelSize, setModelSize] = useState("large-v3");
-    const [availableMemory, setAvailableMemory] = useState(16.0);
-    const [language, setLanguage] = useState(getInitialString("language", "auto"))
-    const micBoostLevel = useRef(getInitialInteger("micBoostLevel", 1))
-    const [recording, setRecording] = useState(false);
-    const chunkIndexRef = useRef(0);
-    const recordingRef = useRef(recording);
-    const mediaRecorderRef = useRef(null);
-    const mediaStreamRef = useRef(null);
-    const analyserRef = useRef(null);
-    const [showRecordingSettings, setShowRecordingSettings] = useState(false);
-    const [showSettings, setShowSettings] = useState(false);
-    const [sections, setSections] = useState([
-        {
+    const getDefaultRecording = () => {
+        return {
             title: "Recording 1",
             lastSavedTitle: "Recording 1",
             recordingId: null,
@@ -56,7 +44,22 @@ const App = () => {
             transcriptionStartTime: null,
             taskId: null,
             transcriptionResults: null
-        },
+        }
+    }
+    const [modelSize, setModelSize] = useState("large-v3");
+    const [availableMemory, setAvailableMemory] = useState(16.0);
+    const [language, setLanguage] = useState(getInitialString("language", "auto"))
+    const micBoostLevel = useRef(getInitialInteger("micBoostLevel", 1))
+    const [recording, setRecording] = useState(false);
+    const chunkIndexRef = useRef(0);
+    const recordingRef = useRef(recording);
+    const mediaRecorderRef = useRef(null);
+    const mediaStreamRef = useRef(null);
+    const analyserRef = useRef(null);
+    const [showRecordingSettings, setShowRecordingSettings] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [sections, setSections] = useState([
+        getDefaultRecording(),
     ]);
     const sectionsRef = useRef(sections);
     const [currentSection, setCurrentSection] = useState(0);
@@ -887,6 +890,10 @@ const App = () => {
         if (overlayRef.current) {
             // create a new array excluding the section with the matching recordingId
             const updatedSections = sectionsRef.current.filter(section => section.recordingId !== recordingId);
+            // if the deleted section was the last one, add a new default
+            if (updatedSections.length === 0) {
+                updatedSections.push(getDefaultRecording());
+            }
             setSections(updatedSections);
             setCurrentSection(0); // show the first recording after deletion
             // call the forward ref function on the child component to update its UI with completed status
