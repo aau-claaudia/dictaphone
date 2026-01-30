@@ -77,6 +77,7 @@ const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTi
                 <RecordingInfo
                     audioUrl={audioUrl}
                     lastSavedTitle={lastSavedTitle}
+                    deleteCompleted={false}
                 />
                 <input
                     type="text"
