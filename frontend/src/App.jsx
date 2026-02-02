@@ -386,7 +386,7 @@ const App = () => {
 
                         if (data.success) {
                             console.debug("Recording deletion completed.");
-                            deleteComplete(data.recording_id);
+                            deleteComplete(data.recording_id, null);
                         } else {
                             console.debug("Server error when deleting recording.");
                             setError(new Error("Server error during recording deletion. Please refresh the browser window."));
@@ -882,14 +882,22 @@ const App = () => {
                 recordingId: updatedSections[index].recordingId
             });
         } else {
-            setError(new Error("UI error during recording deletion. Please refresh the browser window."));
+            // this is a new section with no recording yet - just delete without server interaction
+            deleteComplete(null, index);
         }
     }
 
-    const deleteComplete = (recordingId) => {
+    // pass either recordingId (if a recording exists) or index
+    const deleteComplete = (recordingId, index) => {
         if (overlayRef.current) {
-            // create a new array excluding the section with the matching recordingId
-            const updatedSections = sectionsRef.current.filter(section => section.recordingId !== recordingId);
+            let updatedSections;
+            if (recordingId) {
+                // create a new array excluding the section with the matching recordingId
+                updatedSections = sectionsRef.current.filter(section => section.recordingId !== recordingId);
+            } else {
+                // removes 1 item starting at 'index' and returns a new array
+                updatedSections = sectionsRef.current.toSpliced(index, 1);
+            }
             // if the deleted section was the last one, add a new default
             if (updatedSections.length === 0) {
                 updatedSections.push(getDefaultRecording());

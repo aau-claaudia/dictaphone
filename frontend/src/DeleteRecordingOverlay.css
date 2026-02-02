@@ -123,7 +123,6 @@
     font-size: 1.0em;
 }
 
-/* --- Responsive Styles for Small Screens --- TODO: adapt to small screen */
 @media (max-width: 600px) {
     .interactive-modal-overlay {
         padding: 25px 20px; /* Reduce horizontal padding on smaller screens */

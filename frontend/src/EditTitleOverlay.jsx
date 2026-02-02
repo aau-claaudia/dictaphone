@@ -56,7 +56,8 @@ const EditTitleOverlay = ({ editingIndex, sectionsRef, renameTitle, cancelEditTi
             return false;
         }
         // Check for same title
-        if (titleValue.trim() === lastSavedTitle) {
+        if (titleValue.trim() === lastSavedTitle && audioUrl) {
+            // if there is no recording the lastSavedTitle may no longer be accurate since the title field is not locked
             setInfoText("The title has not been changed.");
             return false;
         }
