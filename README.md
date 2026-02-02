@@ -17,7 +17,7 @@ pip install django django-cors-headers django-rest-framework celery redis channe
 
 ## npm packages needed
 ``` bash
-npm install extendable-media-recorder extendable-media-recorder-wav-encoder
+npm install extendable-media-recorder extendable-media-recorder-wav-encoder react-spinners
 ```
 
 ## npm package for testing the app on mobile phones (https needed)
@@ -55,7 +55,7 @@ nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev --host
 ## Checkout and install the transcriber Python application
 ``` bash
 cd dictaphone
-git clone --depth 1 --single-branch --recursive --shallow-submodules -b "V1.14" https://github.com/aau-claaudia/transcriber.git aau-whisper
+git clone --depth 1 --single-branch --recursive --shallow-submodules -b "V1.15" https://github.com/aau-claaudia/transcriber.git aau-whisper
 cd aau-whisper
 pip install -r requirements.txt
 pip install -e .

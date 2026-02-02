@@ -170,6 +170,7 @@ h1 {
 
 .transcribe-stop-button:disabled {
   background-color: #adb5bd; /* Light grey for disabled state */
+  cursor: not-allowed; /* Indicate the button is not clickable */
 }
 
 .transcribe-stop-button:focus {
@@ -212,6 +213,7 @@ h1 {
 
 .transcribe-button:disabled {
   background-color: #2b542c;
+  cursor: not-allowed; /* Indicate the button is not clickable */
 }
 
 .transcribe-button:focus {
@@ -235,6 +237,26 @@ h1 {
 }
 .section-title-input:focus {
   border-bottom: 2px solid darkgreen; /* Add a bottom border on focus */
+}
+
+.title-edit-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1.2em;
+  margin-left: 10px;
+  padding: 0;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+
+.title-edit-button:hover {
+  opacity: 1;
+}
+
+.title-edit-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .audio-level-container {
@@ -305,10 +327,6 @@ h1 {
 
   /* Changes the mouse cursor to a 'help' icon (a question mark) on hover. */
   cursor: help;
-}
-
-.navigation-buttons:hover {
-  cursor: pointer;
 }
 
 /* Styles for the buttons */
@@ -433,7 +451,7 @@ a.button:hover {
   /* Show the list and style it as cards */
   .transcription-files-list {
     display: block;
-    max-width: 300px; /* As you requested */
+    max-width: 300px;
     margin: 0 auto; /* Center the container */
   }
 
@@ -456,5 +474,9 @@ a.button:hover {
     display: flex;
     flex-wrap: wrap;
     gap: 8px; /* Space between download buttons */
+  }
+
+  .section-title-input.long-title {
+    font-size: 1em;
   }
 }

@@ -1,0 +1,96 @@
+.section-navigation {
+    display: flex;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+.dropdown-container {
+    position: relative;
+}
+
+.dropdown-trigger {
+    margin: 0 10px;
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.dropdown-caret {
+    font-size: 0.8em;
+    /* A little transition for smoothness */
+    transition: transform 0.2s ease-in-out;
+}
+
+.dropdown-trigger.open .dropdown-caret {
+    /* Flips the caret when the menu is open */
+    transform: rotate(180deg);
+}
+
+.dropdown-menu {
+    position: absolute;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    z-index: 100; /* place below mic test overlay (500) and error overlay (1000) */
+    max-height: 200px;
+    overflow-y: auto;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+}
+
+.dropdown-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.section-list-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.section-list-item:hover {
+    background-color: #f0f0f0;
+}
+
+/* A smaller version of the .transcribe-button, ideal for navigation. */
+.btn-small {
+    display: inline-block;
+    padding: 6px 12px; /* Smaller padding */
+    font-size: 14px; /* Smaller font */
+    font-weight: bold;
+    color: #fff;
+    background-color: #28a745;
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+    margin: 0 5px; /* Simple horizontal margin for spacing */
+}
+
+.btn-small:hover {
+    background-color: #218838;
+    transform: translateY(-1px); /* Subtler lift */
+}
+
+.btn-small:active {
+    background-color: #1e7e34;
+    transform: translateY(0);
+}
+
+.btn-small:disabled {
+    background-color: #2b542c;
+    cursor: not-allowed; /* Indicate the button is not clickable */
+}
+
+.btn-small:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.5); /* Slightly smaller focus ring */
+}

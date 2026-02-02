@@ -1,6 +1,8 @@
 import json
+import shutil
 import struct
 import asyncio
+from pathlib import Path
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 import datetime
@@ -11,6 +13,7 @@ import logging
 from enum import Enum
 from .tasks import transcription_task
 from .model_memory_util import calculate_available_memory
+from .data_rename_util import safe_rename, proces_transcription_data_for_title_rename
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +210,90 @@ class AudioChunkManager:
                 })
                 break
 
+    async def rename_title(self, recording_id, new_title) -> bool:
+        """
+        :param recording_id: the recording id
+        :param new_title: the new title for the recording
+        :return: returns true if the renaming was successful, and false otherwise
+        """
+        async with self.lock:
+            logger.info(f"Renaming title, recording_id = {recording_id} new title = {new_title}")
+            try:
+                sanitized_title = validate_linux_filename(new_title).replace(" ", "_")
+                old_title = self.recordings[recording_id]['title'].replace(" ", "_")
+                # 1) validate the new title name
+                if not self.validate_title(sanitized_title):
+                    return False
+                if sanitized_title == old_title:
+                    # trying to rename to existing title
+                    logger.info("Trying to rename title to existing title.")
+                    self.recordings[recording_id]['title'] = sanitized_title
+                    return True
+
+                # 2) rename the .wav file
+                new_recording_file_path = os.path.join(self.recordings[recording_id]['recording_path'], sanitized_title + ".wav")
+                try:
+                    safe_rename(self.recordings[recording_id]['recording_file_path'], new_recording_file_path)
+                except (ValueError, OSError) as e:
+                    logger.error(f"Error renaming title, aborting. Error: {e}")
+                    return False
+
+                # 3) rename files and data in the transcriptions directory
+                transcriptions_dir = os.path.join(self.recordings[recording_id]['recording_path'], 'TRANSCRIPTIONS/')
+                proces_transcription_data_for_title_rename(old_title, sanitized_title, transcriptions_dir)
+
+                # 4) rename the top level folder
+                new_recording_dir_name = (str(recording_id) + "_" + sanitized_title)
+                new_recording_path: str = self.recording_base_path + new_recording_dir_name
+                try:
+                    safe_rename(self.recordings[recording_id]['recording_path'], new_recording_path)
+                except (ValueError, OSError) as e:
+                    logger.error(f"Error renaming title, aborting. Error: {e}")
+                    return False
+                # rename wav path in recordings data structure after folder rename
+                new_recording_file_path = os.path.join(new_recording_path, sanitized_title + ".wav")
+
+                # 5) update the title, recording_path and recording_file_path in the recordings data structure
+                self.recordings[recording_id]['title'] = sanitized_title
+                self.recordings[recording_id]['recording_path'] = new_recording_path
+                self.recordings[recording_id]['recording_file_path'] = new_recording_file_path
+
+                return True
+            except Exception as e:
+                logger.error(f"Error while renaming title: {e}")
+                return False
+
+    async def delete_recording(self, recording_id) -> bool:
+        """
+        :param recording_id: the recording id
+        :return: returns true if the delete operation was successful, and false otherwise
+        """
+        path_str = self.recordings[recording_id]['recording_path']
+        target_path = Path(path_str)
+        # 1) check if the path exists
+        if not target_path.exists():
+            logger.error(f"Error attempting to delete recording directory for recording ID: {recording_id}, path '{target_path}' does not exist.")
+            return False
+
+        # 2) check if the path is a directory
+        if not target_path.is_dir():
+            logger.error(f"Error attempting to delete recording directory for recording ID: {recording_id}, path '{target_path}' is not a directory.")
+            return False
+
+        # 3) attempt to delete
+        try:
+            shutil.rmtree(target_path)
+            logger.info(f"Successfully deleted target path '{target_path}' - recording ID: {recording_id}.")
+            # clean recording data from memory
+            if recording_id in self.recordings:
+                del self.recordings[recording_id]
+            else:
+                logger.error(f"Error cleaning up recording data from memory, Recording ID {recording_id} not found.")
+            return True
+        except OSError as e:
+            logger.error(f"Error attempting to delete recording directory for recording ID: {recording_id}, target path: '{target_path}', error: '{e.strerror}'.")
+            return False
+
     def get_file_path(self, recording_id) -> str:
         return self.recordings[recording_id]['recording_file_path']
 
@@ -237,10 +324,13 @@ class AudioChunkManager:
 
     def get_dirname(self, title) -> str:
         # Not empty and does not contain any of these: <>:"/\|?* or whitespace at ends
-        if bool(title) and not re.search(r'[<>:"/\\|?*\0]', title) and title == title.strip():
+        if self.validate_title(title):
             return (str(self.active_recording_id) + "_" + title).replace(" ", "_")
         else:
             return str(self.active_recording_id)
+
+    def validate_title(self, title):
+        return bool(title) and not re.search(r'[<>:"/\\|?*\0]', title) and title == title.strip()
 
     def set_active_recording_id(self, recording_id: int):
         # method used for setting up tests
@@ -282,7 +372,11 @@ def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
 
             # Extract the title from the directory name (e.g., "1_My_Title" -> "My_Title")
             parts = item_name.split('_', 1)
-            title = parts[1] if len(parts) > 1 else item_name
+            if len(parts) > 1:
+                title = parts[1]
+            else:
+                logger.warning("Malformed directory name, skipping.")
+                continue
             log_path = os.path.join(recording_dir, "completion_log.txt")
             wav_path = os.path.join(recording_dir, title + ".wav")
             # get transcription file links
@@ -399,6 +493,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         initialize
         start_transcription
         cancel_transcription
+        rename_recording
+        delete_recording
 
         :param text_data: control messages from the client
         :param bytes_data: binary audio data from the client
@@ -407,9 +503,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         if text_data is not None:
             data = json.loads(text_data)
             if data.get("type") == "control_message":
-                logger.info("Control message received.")
-                logger.info(data.get("message"))
+                #logger.info("Control message received.")
+                #logger.info(data.get("message"))
                 if data.get("message") == "start_recording":
+                    logger.info(f"Received start_recording control message.")
                     recording_id = await self.chunk_manager.start_new_recording(data.get("parameter"))
                     # send back acknowledgment with recording_id
                     await self.send(text_data=json.dumps({
@@ -455,6 +552,21 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     task_id = param_object.get("taskId")
                     logger.info(f"Received cancel_transcription control message, taks ID: {task_id}")
                     await self.cancel_transcription_task(task_id)
+                elif data.get("message") == "rename_recording":
+                    logger.info("Received rename_recording control message.")
+                    param_object = data.get("parameter")
+                    recording_id = param_object.get("recordingId")
+                    new_title = param_object.get("newTitle")
+                    logger.info(f"Title rename params, recording ID: {recording_id}, new title: {new_title}")
+                    # start title rename and send back status, success/failed
+                    await self.handle_rename(recording_id, new_title)
+                elif data.get("message") == "delete_recording":
+                    logger.info("Received delete_recording control message.")
+                    param_object = data.get("parameter")
+                    recording_id = param_object.get("recordingId")
+                    logger.info(f"Deleting recording with recording ID: {recording_id}")
+                    # start server task and send back status, success/failed
+                    await self.handle_delete(recording_id)
                 else:
                     logger.info("Unknown control message")
         elif bytes_data is not None:
@@ -565,6 +677,27 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
 
     async def send_to_client(self, json_object):
         await self.send(text_data=json.dumps(json_object))
+
+    async def handle_rename(self, recording_id, new_title):
+        logger.info(f"Starting title rename task for recording {recording_id} and new title {new_title}")
+        rename_successful = await self.chunk_manager.rename_title(recording_id, new_title)
+        await self.send(text_data=json.dumps({
+            "message_type": "rename_complete",
+            "success": rename_successful,
+            "recording_id": recording_id,
+            "new_title": new_title,
+            "audio_url": self.chunk_manager.get_file_path(recording_id),
+            "results": prepare_results(os.path.join(self.chunk_manager.get_recording_dir_path(recording_id), 'TRANSCRIPTIONS/'))
+        }))
+
+    async def handle_delete(self, recording_id):
+        logger.info(f"Starting delete task for recording ID: {recording_id}")
+        delete_successful = await self.chunk_manager.delete_recording(recording_id)
+        await self.send(text_data=json.dumps({
+            "message_type": "delete_complete",
+            "success": delete_successful,
+            "recording_id": recording_id,
+        }))
 
     async def start_transcription_task(self, recording_id, model, language):
         # Start the server monitoring

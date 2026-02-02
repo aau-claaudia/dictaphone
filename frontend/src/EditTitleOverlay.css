@@ -1,0 +1,82 @@
+.edit-title-input {
+    width: 100%;
+    padding: 8px;
+    margin: 10px 0 5%;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+
+.edit-actions {
+    margin-top: 2%;
+    margin-bottom: 2%;
+    display: flex;
+    justify-content: flex-end;
+    gap: 3%;
+}
+
+.btn-small-edit {
+    display: inline-block;
+    height: 40px;
+    width: 50%;
+    padding: 6px 12px; /* Smaller padding */
+    font-size: 16px; /* Smaller font */
+    font-weight: bold;
+    color: #fff;
+    background-color: #28a745;
+    border: none;
+    border-radius: 5px;
+    text-align: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.3s ease;
+    margin: 0 5px; /* Simple horizontal margin for spacing */
+}
+
+.btn-small-edit:hover {
+    background-color: #218838;
+    transform: translateY(-1px); /* Subtler lift */
+}
+
+.btn-small-edit:active {
+    background-color: #1e7e34;
+    transform: translateY(0);
+}
+
+.btn-small-edit:disabled {
+    background-color: #2b542c;
+    cursor: not-allowed; /* Indicate the button is not clickable */
+}
+
+.btn-small-edit:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.5); /* Slightly smaller focus ring */
+}
+
+.loader {
+    border: 10px solid #f3f3f3; /* Light grey */
+    border-top: 10px solid #3498db; /* Blue */
+    border-radius: 50%;
+    width: 50px;
+    height: 50px;
+    animation: spin 2s linear infinite;
+    margin: 10px;
+}
+
+.info-text {
+    margin: 10px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* --- Responsive Styles for Small Screens --- */
+@media (max-width: 600px) {
+    .interactive-modal-overlay {
+        padding: 25px 20px; /* Reduce horizontal padding on smaller screens */
+        max-width: 300px;
+    }
+}

@@ -1,0 +1,73 @@
+/* --- Form Elements --- */
+.mic-test-form-group {
+    margin-top: 20px;
+}
+
+.mic-test-label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.mic-test-select {
+    width: 100%;
+    padding: 8px;
+    border-radius: 4px;
+}
+
+/* --- Audio Level Visualizer --- */
+.mic-test-level-container {
+    margin-top: 15px;
+}
+
+.mic-test-level-bar-bg {
+    height: 10px;
+    background-color: #eee;
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.mic-test-level-bar-fg {
+    height: 100%;
+    /* Transitions make the bar movement smoother */
+    transition: width 0.1s linear, background-color 0.3s ease;
+}
+
+/* Classes for dynamic bar color */
+.mic-test-level-bar-fg.level-low {
+    background-color: green;
+}
+
+.mic-test-level-bar-fg.level-medium {
+    background-color: orange;
+}
+
+.mic-test-level-bar-fg.level-high {
+    background-color: red;
+}
+
+/* --- Button Container --- */
+.mic-test-button-container {
+    margin-top: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.mic-test-button-group {
+    display: flex;
+    gap: 10px;
+}
+
+/* --- Responsive Styles for Small Screens --- */
+@media (max-width: 600px) {
+    .mic-test-button-container {
+        /* Stack the button groups vertically */
+        flex-direction: column;
+        gap: 15px; /* Add vertical gap between the stacked groups */
+    }
+
+    .mic-test-button-group {
+        /* Center the buttons within their group */
+        justify-content: center;
+    }
+}

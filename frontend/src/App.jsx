@@ -8,6 +8,10 @@ import {RecordingStatus} from './Constants.jsx';
 import TranscriptionStatus from "./TranscriptionStatus.jsx";
 import dictaphoneImage from "./assets/dictaphone_logo_690x386.png";
 import RecordingSettings from "./RecordingSettings.jsx";
+import MicTestOverlay from './MicTestOverlay';
+import EditTitleOverlay from "./EditTitleOverlay.jsx";
+import DeleteRecordingOverlay from "./DeleteRecordingOverlay.jsx";
+import "./Navigation.css";
 
 let isWavLibraryRegistered = false;
 
@@ -20,21 +24,10 @@ const App = () => {
         const dataFromSession = sessionStorage.getItem(keyname);
         return dataFromSession ? parseInt(JSON.parse(dataFromSession), 10) : parseInt(value, 10);
     }
-    const [modelSize, setModelSize] = useState("large-v3");
-    const [availableMemory, setAvailableMemory] = useState(16.0);
-    const [language, setLanguage] = useState(getInitialString("language", "auto"))
-    const micBoostLevel = useRef(getInitialInteger("micBoostLevel", 1))
-    const [recording, setRecording] = useState(false);
-    const chunkIndexRef = useRef(0);
-    const recordingRef = useRef(recording);
-    const mediaRecorderRef = useRef(null);
-    const mediaStreamRef = useRef(null);
-    const analyserRef = useRef(null);
-    const [showRecordingSettings, setShowRecordingSettings] = useState(false);
-    const [showSettings, setShowSettings] = useState(false);
-    const [sections, setSections] = useState([
-        {
+    const getDefaultRecording = () => {
+        return {
             title: "Recording 1",
+            lastSavedTitle: "Recording 1",
             recordingId: null,
             isRecording: false,
             isInitiating: false,
@@ -51,7 +44,22 @@ const App = () => {
             transcriptionStartTime: null,
             taskId: null,
             transcriptionResults: null
-        },
+        }
+    }
+    const [modelSize, setModelSize] = useState("large-v3");
+    const [availableMemory, setAvailableMemory] = useState(16.0);
+    const [language, setLanguage] = useState(getInitialString("language", "auto"))
+    const micBoostLevel = useRef(getInitialInteger("micBoostLevel", 1))
+    const [recording, setRecording] = useState(false);
+    const chunkIndexRef = useRef(0);
+    const recordingRef = useRef(recording);
+    const mediaRecorderRef = useRef(null);
+    const mediaStreamRef = useRef(null);
+    const analyserRef = useRef(null);
+    const [showRecordingSettings, setShowRecordingSettings] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [sections, setSections] = useState([
+        getDefaultRecording(),
     ]);
     const sectionsRef = useRef(sections);
     const [currentSection, setCurrentSection] = useState(0);
@@ -59,6 +67,14 @@ const App = () => {
     const socketRef = useRef(null);
     const chunkInventoryRef = useRef(new Map());
     const [error, setError] = useState(null);
+    const [showMicTestOverlay, setShowMicTestOverlay] = useState(false);
+    const [showSectionList, setShowSectionList] = useState(false);
+    const dropdownRef = useRef(null);
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const editingIndexRef = useRef(null);
+    const [isDeleteRecording, setIsDeleteRecording] = useState(false);
+    const deleteIndexRef = useRef(null);
+    const overlayRef = useRef(null);
 
     const WHISPER_MODELS = {
         "base": 1.0,
@@ -114,6 +130,20 @@ const App = () => {
         sessionStorage.setItem("language", JSON.stringify(language))
     }, [language]);
 
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setShowSectionList(false);
+            }
+        };
+        if (showSectionList) {
+            document.addEventListener("mousedown", handleClickOutside);
+        } else {
+            document.removeEventListener("mousedown", handleClickOutside);
+        }
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [showSectionList]);
+
     const handleRefresh = () => {
         window.location.reload();
     };
@@ -154,6 +184,8 @@ const App = () => {
         // 2) data request: request a missing data chunk, "request_chunk"
         // 3) output files: transcribed files, "transcribed_file"
         // 4) server data for initializing the app: "initialization_data"
+        // 5) title rename response: rename_complete
+        // 6) recording delete response: delete_complete
         try {
             const data = JSON.parse(message.data);
             if (data.message_type) {
@@ -176,6 +208,7 @@ const App = () => {
                                 }
                                 let sectionObject = {
                                     title: item.title,
+                                    lastSavedTitle: item.title,
                                     recordingId: item.recording_id,
                                     isRecording: false,
                                     isInitiating: false,
@@ -327,6 +360,39 @@ const App = () => {
                         setSections(updatedSections);
                         break;
                     }
+                    case "rename_complete": {
+                        // handle server response for title rename request
+                        console.debug("Title rename response received from server.")
+                        console.debug("Recording ID:", data.recording_id);
+                        console.debug("Success:", data.success);
+                        console.debug("New title:", data.new_title);
+                        //console.debug("Audio url:", data.audio_url);
+                        //console.debug("Results:", data.results);
+
+                        if (data.success) {
+                            console.debug("Title renaming completed.");
+                            saveTitleAndClearOverlay(editingIndexRef.current, data.new_title, data.audio_url, data.results);
+                        } else {
+                            console.debug("Server error when renaming title.");
+                            setError(new Error("Server error during title renaming. Please refresh the browser window."));
+                        }
+                        break;
+                    }
+                    case "delete_complete": {
+                        // handle server response for recording delete requests
+                        console.debug("Recording delete response received from server.")
+                        console.debug("Recording ID:", data.recording_id);
+                        console.debug("Success:", data.success);
+
+                        if (data.success) {
+                            console.debug("Recording deletion completed.");
+                            deleteComplete(data.recording_id, null);
+                        } else {
+                            console.debug("Server error when deleting recording.");
+                            setError(new Error("Server error during recording deletion. Please refresh the browser window."));
+                        }
+                        break;
+                    }
                     default:
                         // handle unknown types
                         console.debug("Unknown message_type from backend (raw):", data);
@@ -336,7 +402,7 @@ const App = () => {
                 console.debug("Message from backend (raw):", data);
             }
         } catch (e) {
-            console.error("Failed to parse message from backend:", message.data);
+            console.error("Unexpected error when processing message from backend:", message.data);
             setError(new Error("Unexpected error. Contact your software provider."));
         }
     }
@@ -439,12 +505,18 @@ const App = () => {
         setCurrentSection((prev) => prev + 1);
     };
 
+    const handleSectionSelect = (index) => {
+        setCurrentSection(index);
+        setShowSectionList(false); // Close dropdown after selection
+    };
+
     const addSection = () => {
         setSections((prevSections) => {
             const newSections = [
                 ...prevSections,
                 {
                     title: `Recording ${prevSections.length + 1}`,
+                    lastSavedTitle: `Recording ${prevSections.length + 1}`,
                     recordingId: null,
                     isRecording: false,
                     isInitiating: false,
@@ -469,13 +541,15 @@ const App = () => {
     };
 
     const handleTitleChange = (e, index) => {
-        const value = e.target.value.replace(/[^a-zA-Z0-9ÆæØøÅå ]/g, ""); // Remove special characters
+        const value = e.target.value.replace(/[^a-zA-Z0-9ÆæØøÅå_ ]/g, ""); // Remove special characters
         const updatedSections = [...sectionsRef.current];
         updatedSections[index].title = value;
         setSections(updatedSections);
         // Dynamically adjust the input width
         const inputElement = e.target;
-        inputElement.style.width = `${Math.max(inputElement.value.length * 0.6, 10)}em`;
+        inputElement.style.width = '0px'; // need to reset to 0px first to get the right width below
+        inputElement.style.width = `${inputElement.scrollWidth + 15}px`;
+        setSections(updatedSections);
     };
 
     const initiateRecording = async (index) => {
@@ -491,8 +565,32 @@ const App = () => {
             mediaStreamRef.current = streamInstance;
             const updatedSections = [...sectionsRef.current];
             updatedSections[index].isInitiating = true;
+            updatedSections[index].title = updatedSections[index].title.trim();
+            if (updatedSections[index].title === "") {
+                updatedSections[index].title = updatedSections[index].lastSavedTitle;
+            } else {
+                updatedSections[index].lastSavedTitle = updatedSections[index].title;
+            }
             setSections(updatedSections);
             sendControlMessage("start_recording", sections[currentSection].title);
+        } catch (e) {
+            console.debug("Error when getting access to user mic.", e);
+            setError(new Error("Could not get access to the microphone. Please enable in the top left corner and refresh the page."));
+        }
+    }
+
+    const initiateMicTest = async () => {
+        let streamInstance;
+        try {
+            // Request access to the microphone
+            streamInstance = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    noiseSuppression: false,
+                    echoCancellation: false
+                }
+            });
+            mediaStreamRef.current = streamInstance;
+            setShowMicTestOverlay(true);
         } catch (e) {
             console.debug("Error when getting access to user mic.", e);
             setError(new Error("Could not get access to the microphone. Please enable in the top left corner and refresh the page."));
@@ -510,6 +608,7 @@ const App = () => {
             }
         })
         setSections(updatedSections);
+        setShowSettings(false);
         // send control message to backend
         sendControlMessage("start_transcription", {
             recordingId: recordingId,
@@ -711,6 +810,105 @@ const App = () => {
     const onUpdateBoost = (boost) => {
         micBoostLevel.current = parseInt(boost, 10);
         sessionStorage.setItem("micBoostLevel", JSON.stringify(micBoostLevel.current))
+        console.debug("Mic boost level saved:", micBoostLevel.current);
+    }
+
+    const handleCloseMicTest = () => {
+        setShowMicTestOverlay(false);
+    };
+
+    const handleEditTitle = (index, e) => {
+        e.stopPropagation(); // don't propagate event to the dropdown list event handler for section navigation
+        editingIndexRef.current = index;
+        setIsEditingTitle(true);
+        setShowSectionList(false);
+    };
+
+    const handleDeleteRecording = (index, e) => {
+        e.stopPropagation(); // don't propagate event to the dropdown list event handler for section navigation
+        deleteIndexRef.current = index;
+        setIsDeleteRecording(true);
+        setShowSectionList(false);
+    }
+
+    const renameTitle = (index, value) => {
+        // if there is no recording just update right away
+        const updatedSections = [...sectionsRef.current];
+        if (updatedSections[index].recordingId) {
+            // server rename required
+            sendControlMessage("rename_recording", {
+                recordingId: updatedSections[index].recordingId,
+                newTitle: value
+            });
+        } else {
+            saveTitleAndClearOverlay(index, value, null, null);
+        }
+    };
+
+    const saveTitleAndClearOverlay = (index, value, audioUrl, results) => {
+        const updatedSections = [...sectionsRef.current];
+        // update title and clear overlay
+        updatedSections[index].title = value;
+        updatedSections[index].lastSavedTitle = value;
+        if (audioUrl) {
+            updatedSections[index].audioUrl = audioUrl;
+        }
+        if (results){
+            updatedSections[index].transcriptionResults = results;
+        }
+        setIsEditingTitle(false);
+        editingIndexRef.current = null;
+        setCurrentSection(index);
+        setSections(updatedSections);
+    }
+
+    const cancelEditTitle = () => {
+        editingIndexRef.current = null;
+        setIsEditingTitle(false);
+    }
+
+    const closeDeleteRecording = () => {
+        deleteIndexRef.current = null;
+        overlayRef.current = null;
+        setIsDeleteRecording(false);
+    }
+
+    const deleteRecording = (index) => {
+        const updatedSections = [...sectionsRef.current];
+        if (updatedSections[index].recordingId) {
+            console.debug(`Starting server deletion for recording ID: ${updatedSections[index].recordingId}`);
+            // call the backend to delete the recording content
+            sendControlMessage("delete_recording", {
+                recordingId: updatedSections[index].recordingId
+            });
+        } else {
+            // this is a new section with no recording yet - just delete without server interaction
+            deleteComplete(null, index);
+        }
+    }
+
+    // pass either recordingId (if a recording exists) or index
+    const deleteComplete = (recordingId, index) => {
+        if (overlayRef.current) {
+            let updatedSections;
+            if (recordingId) {
+                // create a new array excluding the section with the matching recordingId
+                updatedSections = sectionsRef.current.filter(section => section.recordingId !== recordingId);
+            } else {
+                // removes 1 item starting at 'index' and returns a new array
+                updatedSections = sectionsRef.current.toSpliced(index, 1);
+            }
+            // if the deleted section was the last one, add a new default
+            if (updatedSections.length === 0) {
+                updatedSections.push(getDefaultRecording());
+            }
+            setSections(updatedSections);
+            setCurrentSection(0); // show the first recording after deletion
+            // call the forward ref function on the child component to update its UI with completed status
+            overlayRef.current.deletionCompleted();
+        } else {
+            setError(new Error("Error during recording deletion. Please refresh the browser window."));
+        }
     }
 
     return (
@@ -729,7 +927,7 @@ const App = () => {
                             type="text"
                             value={sections[currentSection].title}
                             onChange={(e) => handleTitleChange(e, currentSection)}
-                            className="section-title-input"
+                            className={`section-title-input ${sections[currentSection].title.length > 20 ? 'long-title' : ''}`}
                             maxLength="30" // Limit to 30 characters
                             placeholder="Enter title"
                             disabled={sections[currentSection].titleLocked}
@@ -751,6 +949,19 @@ const App = () => {
                         <button className="transcribe-button" onClick={showOrHideRecordingSettings}>
                             {showRecordingSettings ? 'Hide settings' : 'Show settings'}
                         </button>
+                        <button className="transcribe-button" onClick={initiateMicTest} disabled={recording}>
+                            Test Microphone
+                        </button>
+                        {
+                            showMicTestOverlay && (
+                                <MicTestOverlay
+                                    mediaStream={mediaStreamRef.current}
+                                    initialMicBoostLevel={micBoostLevel.current}
+                                    onSave={onUpdateBoost}
+                                    onClose={handleCloseMicTest}
+                                />
+                            )
+                        }
                         {
                             showRecordingSettings && (
                                 <RecordingSettings
@@ -846,20 +1057,80 @@ const App = () => {
                             )
                         }
                     </div>
-                    <div className="section-navigation"
-                         style={{display: "flex", justifyContent: "center", marginTop: 20}}>
-                        <button className="navigation-buttons" onClick={goToPreviousSection}
+                    <div className="section-navigation">
+                        <button className="btn-small" onClick={goToPreviousSection}
                                 disabled={currentSection === 0}>
                             Previous
                         </button>
-                        <span style={{margin: "0 10px"}}>
-                                Recording {currentSection + 1} of {sections.length}
-                            </span>
-                        <button className="navigation-buttons" onClick={goToNextSection}
+                        <div className="dropdown-container" ref={dropdownRef}>
+                            <div className={`dropdown-trigger ${showSectionList ? 'open' : ''}`}
+                                 onClick={() => setShowSectionList(!showSectionList)}
+                                 title="Click to select a recording"
+                            >
+                                <span>
+                                    Recording {currentSection + 1} of {sections.length}
+                                </span>
+                                <span className="dropdown-caret">▼</span>
+                            </div>
+                            {showSectionList && (
+                                <div className="dropdown-menu">
+                                    <ul className="dropdown-list">
+                                        {sections.map((section, index) => (
+                                            <li key={index}
+                                                onClick={() => !recording && handleSectionSelect(index)}
+                                                title="Navigate to recording"
+                                                className="section-list-item"
+                                                style={recording ? {opacity: 0.5, cursor: 'not-allowed'} : {}}
+                                            >
+                                                <span>{section.title}</span>
+                                                <button
+                                                    className="title-edit-button"
+                                                    onClick={(e) => handleEditTitle(index, e)}
+                                                    title="Edit title"
+                                                    disabled={recording || section.transcribing}
+                                                >
+                                                    ✏️
+                                                </button>
+                                                <button
+                                                    className="title-edit-button"
+                                                    onClick={(e) => handleDeleteRecording(index, e)}
+                                                    title="Delete recording"
+                                                    disabled={recording || section.transcribing}
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                        </div>
+                        <button className="btn-small" onClick={goToNextSection}
                                 disabled={currentSection === sections.length - 1}>
                             Next
                         </button>
                     </div>
+                    {
+                        isEditingTitle && (
+                            <EditTitleOverlay
+                                editingIndex={editingIndexRef.current}
+                                sectionsRef={sectionsRef}
+                                renameTitle={renameTitle}
+                                cancelEditTitle={cancelEditTitle}
+                            />
+                        )
+                    }
+                    {
+                        isDeleteRecording && (
+                            <DeleteRecordingOverlay
+                                ref={overlayRef}
+                                deleteIndex={deleteIndexRef.current}
+                                sectionsRef={sectionsRef}
+                                closeDeleteRecording={closeDeleteRecording}
+                                deleteRecording={deleteRecording}
+                            />
+                        )
+                    }
                 </div>
             </div>
         </div>
