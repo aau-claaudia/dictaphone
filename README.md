@@ -55,7 +55,7 @@ nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev --host
 ## Checkout and install the transcriber Python application
 ``` bash
 cd dictaphone
-git clone --depth 1 --single-branch --recursive --shallow-submodules -b "V1.15" https://github.com/aau-claaudia/transcriber.git aau-whisper
+git clone --depth 1 --single-branch --recursive --shallow-submodules -b "V1.16" https://github.com/aau-claaudia/transcriber.git aau-whisper
 cd aau-whisper
 pip install -r requirements.txt
 pip install -e .
@@ -83,7 +83,7 @@ Now start the development server as usual.
 
 ## Start development react frontend
 ``` bash
-nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev --host
+nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev
 ```
 You will see from the output that the server starts listening on HTTPS on your IP. 
 From your browser, now go to this URL, e.g. https://10.49.223.156:5173
