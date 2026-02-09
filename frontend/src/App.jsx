@@ -950,7 +950,7 @@ const App = () => {
                             {showRecordingSettings ? 'Hide settings' : 'Show settings'}
                         </button>
                         <button className="transcribe-button" onClick={initiateMicTest} disabled={recording}>
-                            Test Microphone
+                            Test microphone
                         </button>
                         {
                             showMicTestOverlay && (
