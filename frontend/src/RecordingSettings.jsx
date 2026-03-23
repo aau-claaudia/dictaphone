@@ -13,7 +13,7 @@ const RecordingSettings = ({onUpdateBoost, currentBoost}) => {
             <div>
                 <h3>Microphone amplification level</h3>
                 <div className="select-box">
-                    <select defaultValue={currentBoost} onChange={handleBoostChange}>
+                    <select value={currentBoost} onChange={handleBoostChange}>
                         <option value="1">1x</option>
                         <option value="2">2x</option>
                         <option value="3">3x</option>
