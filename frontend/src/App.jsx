@@ -556,6 +556,7 @@ const App = () => {
     };
 
     const initiateRecording = async (index) => {
+        setShowRecordingSettings(false);
         let streamInstance;
         try {
             // Request access to the microphone
@@ -583,6 +584,7 @@ const App = () => {
     }
 
     const initiateMicTest = async () => {
+        setShowRecordingSettings(false);
         let streamInstance;
         try {
             // Request access to the microphone
