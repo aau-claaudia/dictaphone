@@ -29,19 +29,23 @@ class AudioChunkManager:
     def __init__(self, consumer, load_data_from_server=True):
         self.consumer = consumer
         self.active_recording_id = 0 # first recording will have ID = 1
+        self.mic_boost_level = 1
         self.recordings = {}
         self.lock = asyncio.Lock() # Lock for async operations
         if load_data_from_server:
             # not running in test mode
             self.recording_base_path = get_recording_base_path()
-            self.initialize_recording_data(load_all_recordings_status(self.recording_base_path))
+            self.initialize_recording_data(load_all_recordings_status(self.recording_base_path), load_settings(self.recording_base_path))
         else:
             # running integration test
             recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
             os.makedirs(recording_path, exist_ok=True)
             self.recording_base_path = recording_path
 
-    def initialize_recording_data(self, data: list[dict]):
+    def initialize_recording_data(self, data: list[dict], settings: dict):
+        # load settings
+        self.mic_boost_level = settings['micBoostLevel']
+        # load_settings method creates settings.json if it does not exist
         if len(data) < 1:
             logger.info("No previous recording data found on server.")
             return
@@ -294,6 +298,27 @@ class AudioChunkManager:
             logger.error(f"Error attempting to delete recording directory for recording ID: {recording_id}, target path: '{target_path}', error: '{e.strerror}'.")
             return False
 
+    async def save_mic_boost(self, mic_boost_level):
+        """
+        Reads the settings file, updates the micBoostLevel, and saves the file.
+        Preserves other keys in the JSON object if they exist.
+        """
+        self.mic_boost_level = mic_boost_level
+        settings = {}
+        settings_file_path = os.path.join(self.recording_base_path, "settings.json")
+        # Read existing data if the file exists
+        if os.path.exists(settings_file_path):
+            logger.info("Reading settings file.")
+            with open(settings_file_path, 'r') as f:
+                try:
+                    settings = json.load(f)
+                except json.JSONDecodeError:
+                    settings = {} # Start fresh if file is corrupted
+        settings['micBoostLevel'] = mic_boost_level
+        with open(settings_file_path, 'w') as f:
+            json.dump(settings, f, indent=4)
+            logger.info("Settings file updated.")
+
     def get_file_path(self, recording_id) -> str:
         return self.recordings[recording_id]['recording_file_path']
 
@@ -336,6 +361,9 @@ class AudioChunkManager:
         # method used for setting up tests
         self.active_recording_id = recording_id
 
+    def get_mic_boost_level(self):
+        return self.mic_boost_level
+
     def validate_chunk_index(self, index):
         try:
             value = int(index)
@@ -347,6 +375,28 @@ class AudioChunkManager:
         async with self.lock:
             return self.recordings
 
+
+def load_settings(base_recordings_path: str) -> dict:
+    """
+    Creates settings.json with default content if it doesn't exist.
+    Otherwise, reads settings from the existing file.
+    """
+    file_path = os.path.join(base_recordings_path, "settings.json")
+    settings: dict = {}
+    if not os.path.exists(file_path):
+        # default settings
+        default_settings = {
+            "micBoostLevel": 1
+        }
+        with open(file_path, 'w') as f:
+            json.dump(default_settings, f, indent=4)
+        settings = default_settings
+    else:
+        # read the variable from the file
+        with open(file_path, 'r') as f:
+            settings = json.load(f)
+
+    return settings
 
 def load_all_recordings_status(base_recordings_path: str) -> list[dict]:
     """
@@ -495,6 +545,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         cancel_transcription
         rename_recording
         delete_recording
+        save_mic_boost_level
 
         :param text_data: control messages from the client
         :param bytes_data: binary audio data from the client
@@ -536,7 +587,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     await self.send(text_data=json.dumps({
                         'message_type': 'initialization_data',
                         'recordings': list(client_data.values()),
-                        'available_memory': calculate_available_memory()
+                        'available_memory': calculate_available_memory(),
+                        'mic_boost_level': self.chunk_manager.get_mic_boost_level()
                     }))
                 elif data.get("message") == "start_transcription":
                     logger.info("Received start_transcription control message.")
@@ -567,6 +619,13 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     logger.info(f"Deleting recording with recording ID: {recording_id}")
                     # start server task and send back status, success/failed
                     await self.handle_delete(recording_id)
+                elif data.get("message") == "save_mic_boost_level":
+                    logger.info("Received save_mic_boost_level control message.")
+                    param_object = data.get("parameter")
+                    mic_boost_level = param_object.get("micBoostLevel")
+                    logger.info(f"Saving mic boost level setting to: {mic_boost_level}")
+                    # start save task
+                    await self.save_mic_boost_level(mic_boost_level)
                 else:
                     logger.info("Unknown control message")
         elif bytes_data is not None:
@@ -698,6 +757,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             "success": delete_successful,
             "recording_id": recording_id,
         }))
+
+    async def save_mic_boost_level(self, mic_boost_level):
+        logger.info(f"Starting save task for mic boost level: {mic_boost_level}")
+        await self.chunk_manager.save_mic_boost(mic_boost_level)
 
     async def start_transcription_task(self, recording_id, model, language):
         # Start the server monitoring

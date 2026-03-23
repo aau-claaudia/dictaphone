@@ -20,10 +20,6 @@ const App = () => {
         const dataFromSession = sessionStorage.getItem(keyname);
         return dataFromSession ? JSON.parse(dataFromSession) : value;
     }
-    const getInitialInteger = (keyname, value) => {
-        const dataFromSession = sessionStorage.getItem(keyname);
-        return dataFromSession ? parseInt(JSON.parse(dataFromSession), 10) : parseInt(value, 10);
-    }
     const getDefaultRecording = () => {
         return {
             title: "Recording 1",
@@ -49,7 +45,7 @@ const App = () => {
     const [modelSize, setModelSize] = useState("large-v3");
     const [availableMemory, setAvailableMemory] = useState(16.0);
     const [language, setLanguage] = useState(getInitialString("language", "auto"))
-    const micBoostLevel = useRef(getInitialInteger("micBoostLevel", 1))
+    const micBoostLevel = useRef(1)
     const [recording, setRecording] = useState(false);
     const chunkIndexRef = useRef(0);
     const recordingRef = useRef(recording);
@@ -244,6 +240,13 @@ const App = () => {
                             console.debug("Unable to parse available memory as float value. Defaulting to 16.0 GB.")
                             setAvailableMemory(16.0);
                             setModelSize("large-v3");
+                        }
+                        const micBoost = data.mic_boost_level;
+                        console.debug('Mic boost level:', micBoost);
+                        if (micBoost && !isNaN(parseInt(micBoost))) {
+                            micBoostLevel.current = parseInt(micBoost, 10);
+                        } else {
+                            console.debug("Unable to parse mic boost level from server.")
                         }
                         break;
                     case "ack_start_recording":
@@ -809,7 +812,9 @@ const App = () => {
 
     const onUpdateBoost = (boost) => {
         micBoostLevel.current = parseInt(boost, 10);
-        sessionStorage.setItem("micBoostLevel", JSON.stringify(micBoostLevel.current))
+        sendControlMessage("save_mic_boost_level", {
+            micBoostLevel: micBoostLevel.current
+        });
         console.debug("Mic boost level saved:", micBoostLevel.current);
     }
 
