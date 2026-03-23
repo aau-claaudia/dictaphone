@@ -1,8 +1,10 @@
-import React from 'react';
+import React, {useState} from 'react';
 
 const RecordingSettings = ({onUpdateBoost, currentBoost}) => {
+    const [micBoost, setMicBoost] = useState(currentBoost);
 
     const handleBoostChange = (event) => {
+        setMicBoost(Number(event.target.value))
         onUpdateBoost(event.target.value);
     };
 
@@ -13,7 +15,7 @@ const RecordingSettings = ({onUpdateBoost, currentBoost}) => {
             <div>
                 <h3>Microphone amplification level</h3>
                 <div className="select-box">
-                    <select value={currentBoost} onChange={handleBoostChange}>
+                    <select value={Number(micBoost)} onChange={handleBoostChange}>
                         <option value="1">1x</option>
                         <option value="2">2x</option>
                         <option value="3">3x</option>
