@@ -72,12 +72,13 @@ const App = () => {
     const deleteIndexRef = useRef(null);
     const overlayRef = useRef(null);
 
-    const WHISPER_MODELS = {
-        "base": 1.0,
-        "small": 2.0,
-        "medium": 5.0,
-        "large-v3": 10.0,
-        "large-v3-turbo": 6.0,
+    const TRANSCRIPTION_MODELS = {
+        "whisper/base": 1.0,
+        "whisper/small": 2.0,
+        "whisper/medium": 5.0,
+        "whisper/large-v3": 10.0,
+        "whisper/large-v3-turbo": 6.0,
+        "nvidia/parakeet-tdt-0.6b-v3": 4.0
     }
 
     // Determine protocol (ws or wss) based on the page's protocol (http or https)
@@ -166,7 +167,7 @@ const App = () => {
      * It returns the name of the largest model that fits the memory constraints.
      */
     const getDefaultModel = (availableMemory) => {
-        const fittingModels = Object.entries(WHISPER_MODELS)
+        const fittingModels = Object.entries(TRANSCRIPTION_MODELS)
             .filter(([_, memoryReq]) => memoryReq <= availableMemory)
             .sort(([, memA], [, memB]) => memB - memA); // Sort by memory descending
 
@@ -1041,7 +1042,7 @@ const App = () => {
                                         onUpdateModel={onUpdateModel}
                                         currentModelSize={modelSize}
                                         availableMemory={availableMemory}
-                                        whisperModels={WHISPER_MODELS}
+                                        transcriptionModels={TRANSCRIPTION_MODELS}
                                         onUpdateLanguage={onUpdateLanguage}
                                         currentLanguage={language}
                                     />

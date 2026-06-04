@@ -776,7 +776,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             size = os.path.getsize(recording_file_path)
         except FileNotFoundError:
             logger.error(f"Error when starting transcription, nu such file path, recording ID: {recording_id}")
-        task = transcription_task.delay(recording_dir_path, recording_file_path, model, language)
+        cleaned_model_name = clean_model_name(model)
+        task = transcription_task.delay(recording_dir_path, recording_file_path, cleaned_model_name, language)
         # Store the task ID to monitor it
         task_id = task.id
         self.active_tasks[task_id] = {
@@ -1018,6 +1019,18 @@ def get_recording_base_path() -> str:
         recording_path: str = os.path.join(recording_base_dir, 'RECORDINGS/')
         os.makedirs(recording_path, exist_ok=True)
         return recording_path
+
+def clean_model_name(model_name):
+    # Clean parakeet model name
+    if "parakeet" in model_name:
+        return "parakeet"
+
+    # Handle prefix removal from whisper model names
+    prefix_to_remove = "whisper/"
+    if model_name.startswith(prefix_to_remove):
+        return model_name[len(prefix_to_remove):]
+
+    return model_name
 
 def save_audio_data_for_test(audio_data, recording_id, chunk_index, includes_header, directory="dictaphone/resources/test_chunks"):
     """
