@@ -164,8 +164,8 @@ CHANNEL_LAYERS = {
             # Using different database number (1) to keep data separate from celery data (0)
             "hosts": [{
                 "address": "redis://127.0.0.1:6379/1",
-                "socket_timeout": 30,
-                "socket_connect_timeout": 30,
+                "socket_timeout": 5,
+                "socket_connect_timeout": 5,
                 "retry_on_timeout": True,
             }],
         },
