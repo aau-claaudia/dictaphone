@@ -2,11 +2,9 @@ from celery import shared_task
 from celery.contrib.abortable import AbortableTask
 import subprocess
 import os
-import shutil
 import time
 import logging
-
-from django.conf import settings
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +48,9 @@ def transcription_task(self, recording_directory, recording_file_path, model_siz
 
         # Capture the output and error after the process completes
         output, error = process.communicate()
-        write_transcriber_output(error, output, transcriber_output_file)
+        write_transcriber_output(error, output, transcriber_output_file, recording_directory, model_size)
     except subprocess.CalledProcessError as e:
-        write_transcriber_output(e.stderr, e.stdout, transcriber_output_file)
+        write_transcriber_output(e.stderr, e.stdout, transcriber_output_file, recording_directory, model_size)
 
     finally:
         # Ensure the subprocess is terminated if it is still running
@@ -62,7 +60,22 @@ def transcription_task(self, recording_directory, recording_file_path, model_siz
 
     return "Task completed"
 
-def write_transcriber_output(error, output, transcriber_output_file):
-    with open(transcriber_output_file, 'w') as t_file:
+def write_transcriber_output(error, output, transcriber_output_file, directory: str, model: str, ):
+    # create a list of input files
+    path = Path(directory)
+    # Check if the path exists and is a directory
+    if not path.exists():
+        logger.error(f"Error when writing transcription output: The path '{directory}' does not exist.")
+        return []
+    if not path.is_dir():
+        logger.error(f"Error when writing transcription output: '{directory}' is not a directory.")
+        return []
+    # Iterate through the directory and filter for files
+    input_file_list = [item.name for item in path.iterdir() if item.is_file() and item.name.lower().endswith(".wav")]
+    output_header = f"Model: {model}, Input files:\n"
+    for file_name in input_file_list:
+        output_header = output_header + f"{file_name}\n"
+    with open(transcriber_output_file, 'a') as t_file:
+        t_file.write(output_header)
         t_file.write(output)
         t_file.write(error)
