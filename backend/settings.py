@@ -162,7 +162,12 @@ CHANNEL_LAYERS = {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
             # Using different database number (1) to keep data separate from celery data (0)
-            "hosts": ['redis://127.0.0.1:6379/1'],
+            "hosts": [{
+                "address": "redis://127.0.0.1:6379/1",
+                "socket_timeout": 30,
+                "socket_connect_timeout": 30,
+                "retry_on_timeout": True,
+            }],
         },
     },
 }
