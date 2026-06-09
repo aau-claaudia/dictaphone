@@ -598,7 +598,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     await self.send(text_data=json.dumps({
                         'message_type': 'initialization_data',
                         'recordings': list(client_data.values()),
-                        'available_memory': calculate_available_memory(),
+                        'available_memory': database_sync_to_async(calculate_available_memory())(),
                         'mic_boost_level': self.chunk_manager.get_mic_boost_level()
                     }))
                 elif data.get("message") == "start_transcription":
