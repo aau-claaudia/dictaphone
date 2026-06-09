@@ -153,28 +153,21 @@ CORS_ALLOW_CREDENTIALS = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Add Celery configuration
-CELERY_BROKER_URL = 'redis://127.0.0.1:6379/0'
-CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/0'
+CELERY_BROKER_URL = 'redis://127.0.0.1:6379/1'
+CELERY_RESULT_BACKEND = 'redis://127.0.0.1:6379/1'
 
 # see https://channels.readthedocs.io/en/latest/deploying.html
-#CHANNEL_LAYERS = {
-#    'default': {
-#        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-#        'CONFIG': {
-#            # Using different database number (1) to keep data separate from celery data (0)
-#            "hosts": [{
-#                "address": "redis://127.0.0.1:6379/1",
-#                "socket_timeout": 5,
-#                "socket_connect_timeout": 5,
-#                "retry_on_timeout": True,
-#            }],
-#        },
-#    },
-#}
 CHANNEL_LAYERS = {
-    "default": {
-        "BACKEND": "channels.layers.InMemoryChannelLayer"
-    }
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [{
+                "address": "unix:///var/run/redis/redis.sock",
+                "db": 0,
+                "socket_timeout": 5,
+            }],
+        },
+    },
 }
 
 LOGGING = {
