@@ -164,7 +164,7 @@ CHANNEL_LAYERS = {
             "hosts": [{
                 "address": "unix:///var/run/redis/redis.sock",
                 "db": 0,
-                "socket_timeout": 5,
+                "socket_timeout": 20,
             }],
         },
     },
