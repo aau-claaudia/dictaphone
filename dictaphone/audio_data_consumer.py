@@ -523,13 +523,13 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         # Initialize data from disk
         await self.chunk_manager.initialize()
+        await self.accept()
         # The group is used to be able to get transcription_completed messages across client re-connects
         # The group_add operation is idempotent
         await self.channel_layer.group_add(
             self.transcription_group_name,
             self.channel_name
         )
-        await self.accept()
 
     async def disconnect(self, close_code):
         # this is called if the client disconnects, e.g. if the client browser window is closed or refreshed

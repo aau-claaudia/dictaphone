@@ -13,8 +13,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 load_dotenv()
 import os
-import asyncio
-asyncio.get_event_loop().set_debug(True)
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
