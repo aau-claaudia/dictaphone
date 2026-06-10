@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 
 from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
 import datetime
 import os
 import re
@@ -32,15 +33,23 @@ class AudioChunkManager:
         self.mic_boost_level = 1
         self.recordings = {}
         self.lock = asyncio.Lock() # Lock for async operations
-        if load_data_from_server:
-            # not running in test mode
-            self.recording_base_path = get_recording_base_path()
-            self.initialize_recording_data(load_all_recordings_status(self.recording_base_path), load_settings(self.recording_base_path))
-        else:
+        self.recording_base_path = None
+        self.load_data_from_server = load_data_from_server
+        if not self.load_data_from_server:
             # running integration test
             recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
             os.makedirs(recording_path, exist_ok=True)
             self.recording_base_path = recording_path
+
+    async def initialize(self):
+        """Perform blocking I/O operations asynchronously."""
+        if self.load_data_from_server:
+            # initialize data from server
+            # Load data using threads
+            self.recording_base_path = await database_sync_to_async(get_recording_base_path)()
+            status_data = await database_sync_to_async(load_all_recordings_status)(self.recording_base_path)
+            settings_data = await database_sync_to_async(load_settings)(self.recording_base_path)
+            self.initialize_recording_data(status_data, settings_data)
 
     def initialize_recording_data(self, data: list[dict], settings: dict):
         # load settings
@@ -512,6 +521,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         self.transcription_group_name = "transcription_monitor_group"
 
     async def connect(self):
+        # Initialize data from disk
+        await self.chunk_manager.initialize()
         await self.accept()
         # The group is used to be able to get transcription_completed messages across client re-connects
         # The group_add operation is idempotent
@@ -587,7 +598,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     await self.send(text_data=json.dumps({
                         'message_type': 'initialization_data',
                         'recordings': list(client_data.values()),
-                        'available_memory': calculate_available_memory(),
+                        'available_memory': await database_sync_to_async(calculate_available_memory)(),
                         'mic_boost_level': self.chunk_manager.get_mic_boost_level()
                     }))
                 elif data.get("message") == "start_transcription":
