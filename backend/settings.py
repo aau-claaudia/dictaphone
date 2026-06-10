@@ -161,10 +161,11 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
+            # Using different database number (0) to keep data separate from celery data (1)
             "hosts": [{
-                "address": "unix:///var/run/redis/redis.sock",
-                "db": 0,
+                "address": "redis://127.0.0.1:6379/0",
                 "socket_timeout": 20,
+                "socket_connect_timeout": 20,
             }],
         },
     },
