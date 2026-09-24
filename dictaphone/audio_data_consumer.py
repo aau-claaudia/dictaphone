@@ -15,6 +15,7 @@ from enum import Enum
 from .tasks import transcription_task
 from .model_memory_util import calculate_available_memory
 from .data_rename_util import safe_rename, proces_transcription_data_for_title_rename
+from .audit_log_request_handler import send_audit_event
 
 logger = logging.getLogger(__name__)
 
@@ -575,6 +576,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                         'message_type': 'ack_start_recording',
                         'recording_id': recording_id
                     }))
+                    # send request to audit log service
+                    send_audit_event("RECORDING_STARTED", "Recording started by user.", {
+                        "recordingID": recording_id
+                    })
                 elif data.get("message") == "stop_recording":
                     total_chunks = data.get("parameter")
                     logger.info(f"Received stop_recording. Total number of chunks in recording: {total_chunks}")
@@ -610,6 +615,12 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     logger.info(f"Transcription params: {recording_id}, {model}, {language}")
                     # start transcription task and send back the task id
                     await self.start_transcription_task(recording_id, model, language)
+                    # send request to audit log service
+                    send_audit_event("TRANSCRIPTION_STARTED", "Transcription started by user.", {
+                        "recordingID": recording_id,
+                        "model": model,
+                        "language": language
+                    })
                 elif data.get("message") == "cancel_transcription":
                     param_object = data.get("parameter")
                     task_id = param_object.get("taskId")
@@ -733,6 +744,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             if send_info_to_client:
                 logger.info("Sending file info to client.")
                 await self.send_finalization_data(recording_id, RecordingStatus.DATA_LOSS)
+        # send request to audit log service
+        send_audit_event("RECORDING_FINISHED", "Recording stopped by user.", {
+            "recordingID": recording_id,
+            "recordingStatus": str(success_status) if recording_finalized else str(RecordingStatus.DATA_LOSS)
+        })
 
     async def send_finalization_data(self, recording_id, status: RecordingStatus):
         path = self.chunk_manager.get_file_path(recording_id)
@@ -842,6 +858,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                                     "results": prepare_results(task_info["transcription_dir"])
                                 }
                             )
+                            # send request to audit log service
+                            send_audit_event("TRANSCRIPTION_FINISHED", "Transcription job finished.", {
+                                "recordingID": task_info['recording_id'],
+                                "jobResultState": result.state, # e.g., 'SUCCESS', 'FAILURE', 'REVOKED'
+                            })
                         except KeyError:
                             # Task was removed in another operation, just continue
                             pass
