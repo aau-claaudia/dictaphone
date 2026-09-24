@@ -12,7 +12,7 @@ Transcription of recordings is done using the Transcriber project. Transcription
 
 ## Python packages needed
 ``` bash
-pip install django django-cors-headers django-rest-framework celery redis channels-redis python-dotenv channels daphne pytest pytest-asyncio torch
+pip install django django-cors-headers django-rest-framework celery redis channels-redis python-dotenv channels daphne pytest pytest-asyncio torch requests
 ```
 
 ## npm packages needed
@@ -35,7 +35,9 @@ DJANGO_LOG_HANDLER='console'
 DJANGO_LOG_LEVEL='DEBUG'
 DJANGO_LOG_FILE='/home/nikko/projects/dictaphone/django.log'
 MEMORY_IN_GIGS=64
+AUDIT_LOG_URL=http://127.0.0.1:PORT/append
 ```
+Note that you need to lookup and insert the port for the AUDIT_LOG_URL.
 
 ## Start daphne server for serving WebSocket (activate Python env)
 ``` bash
@@ -55,7 +57,7 @@ nikko@nikkoAtClaaudia:~/projects/dictaphone/frontend$ npm run dev --host
 ## Checkout and install the transcriber Python application
 ``` bash
 cd dictaphone
-git clone --depth 1 --single-branch --recursive --shallow-submodules -b "V1.19" https://github.com/aau-claaudia/transcriber.git aau-whisper
+git clone --depth 1 --single-branch --recursive --shallow-submodules -b "V1.22" https://github.com/aau-claaudia/transcriber.git aau-whisper
 cd aau-whisper
 pip install -e .
 ```

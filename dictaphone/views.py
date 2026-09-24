@@ -6,6 +6,7 @@ import logging
 from django.shortcuts import render
 
 from backend import settings
+from .audit_log_request_handler import send_audit_event
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,11 @@ def serve_file(request, path):
     # Check if the file exists
     if not os.path.exists(file_path):
         raise Http404("File not found")
+
+    # send request to audit log service
+    send_audit_event("DOWNLOAD_FILE", "File downloaded by user.", {
+        "filePath": file_path
+    })
 
     # Open the file and create the response
     with open(file_path, 'rb') as f:

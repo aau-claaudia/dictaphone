@@ -5,6 +5,7 @@ import asyncio
 from pathlib import Path
 
 from channels.generic.websocket import AsyncWebsocketConsumer
+from channels.db import database_sync_to_async
 import datetime
 import os
 import re
@@ -14,6 +15,7 @@ from enum import Enum
 from .tasks import transcription_task
 from .model_memory_util import calculate_available_memory
 from .data_rename_util import safe_rename, proces_transcription_data_for_title_rename
+from .audit_log_request_handler import send_audit_event
 
 logger = logging.getLogger(__name__)
 
@@ -32,15 +34,23 @@ class AudioChunkManager:
         self.mic_boost_level = 1
         self.recordings = {}
         self.lock = asyncio.Lock() # Lock for async operations
-        if load_data_from_server:
-            # not running in test mode
-            self.recording_base_path = get_recording_base_path()
-            self.initialize_recording_data(load_all_recordings_status(self.recording_base_path), load_settings(self.recording_base_path))
-        else:
+        self.recording_base_path = None
+        self.load_data_from_server = load_data_from_server
+        if not self.load_data_from_server:
             # running integration test
             recording_path: str = os.path.join(settings.MEDIA_ROOT, 'RECORDINGS/')
             os.makedirs(recording_path, exist_ok=True)
             self.recording_base_path = recording_path
+
+    async def initialize(self):
+        """Perform blocking I/O operations asynchronously."""
+        if self.load_data_from_server:
+            # initialize data from server
+            # Load data using threads
+            self.recording_base_path = await database_sync_to_async(get_recording_base_path)()
+            status_data = await database_sync_to_async(load_all_recordings_status)(self.recording_base_path)
+            settings_data = await database_sync_to_async(load_settings)(self.recording_base_path)
+            self.initialize_recording_data(status_data, settings_data)
 
     def initialize_recording_data(self, data: list[dict], settings: dict):
         # load settings
@@ -512,6 +522,8 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
         self.transcription_group_name = "transcription_monitor_group"
 
     async def connect(self):
+        # Initialize data from disk
+        await self.chunk_manager.initialize()
         await self.accept()
         # The group is used to be able to get transcription_completed messages across client re-connects
         # The group_add operation is idempotent
@@ -564,6 +576,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                         'message_type': 'ack_start_recording',
                         'recording_id': recording_id
                     }))
+                    # send request to audit log service
+                    send_audit_event("RECORDING_STARTED", "Recording started by user.", {
+                        "recordingID": recording_id
+                    })
                 elif data.get("message") == "stop_recording":
                     total_chunks = data.get("parameter")
                     logger.info(f"Received stop_recording. Total number of chunks in recording: {total_chunks}")
@@ -587,7 +603,7 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     await self.send(text_data=json.dumps({
                         'message_type': 'initialization_data',
                         'recordings': list(client_data.values()),
-                        'available_memory': calculate_available_memory(),
+                        'available_memory': await database_sync_to_async(calculate_available_memory)(),
                         'mic_boost_level': self.chunk_manager.get_mic_boost_level()
                     }))
                 elif data.get("message") == "start_transcription":
@@ -599,6 +615,12 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     logger.info(f"Transcription params: {recording_id}, {model}, {language}")
                     # start transcription task and send back the task id
                     await self.start_transcription_task(recording_id, model, language)
+                    # send request to audit log service
+                    send_audit_event("TRANSCRIPTION_STARTED", "Transcription started by user.", {
+                        "recordingID": recording_id,
+                        "model": model,
+                        "language": language
+                    })
                 elif data.get("message") == "cancel_transcription":
                     param_object = data.get("parameter")
                     task_id = param_object.get("taskId")
@@ -722,6 +744,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
             if send_info_to_client:
                 logger.info("Sending file info to client.")
                 await self.send_finalization_data(recording_id, RecordingStatus.DATA_LOSS)
+        # send request to audit log service
+        send_audit_event("RECORDING_FINISHED", "Recording stopped by user.", {
+            "recordingID": recording_id,
+            "recordingStatus": str(success_status) if recording_finalized else str(RecordingStatus.DATA_LOSS)
+        })
 
     async def send_finalization_data(self, recording_id, status: RecordingStatus):
         path = self.chunk_manager.get_file_path(recording_id)
@@ -831,6 +858,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                                     "results": prepare_results(task_info["transcription_dir"])
                                 }
                             )
+                            # send request to audit log service
+                            send_audit_event("TRANSCRIPTION_FINISHED", "Transcription job finished.", {
+                                "recordingID": task_info['recording_id'],
+                                "jobResultState": result.state, # e.g., 'SUCCESS', 'FAILURE', 'REVOKED'
+                            })
                         except KeyError:
                             # Task was removed in another operation, just continue
                             pass

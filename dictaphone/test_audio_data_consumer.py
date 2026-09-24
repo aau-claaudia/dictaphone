@@ -43,7 +43,7 @@ async def test_audio_upload_and_finalize(audio_chunks, monkeypatch):
     """
     # To ensure the test runs in a clean, isolated environment, we patch the
     # AudioChunkManager's initializer. This uses the `load_data_from_server`
-    # flag you added to prevent the test from loading pre-existing recording
+    # flag to prevent the test from loading pre-existing recording
     # data from the server, which could interfere with test assertions.
     original_init = AudioChunkManager.__init__
 
