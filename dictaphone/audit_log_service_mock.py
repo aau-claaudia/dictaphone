@@ -3,7 +3,7 @@ This module creates an audit log test service.
 The service captures and validates incoming JSON messages.
 
 Run with:
-    python3 audit_log_service_mock.py --127.0.0.1 --port PORT
+    python3 audit_log_service_mock.py --host 127.0.0.1 --port PORT
 
 Accepted messages are printed to the terminal and are also available from
 curl -X GET http://127.0.0.1:PORT/messages for the lifetime of the process.

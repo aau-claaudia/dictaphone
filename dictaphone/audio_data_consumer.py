@@ -634,6 +634,11 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     logger.info(f"Title rename params, recording ID: {recording_id}, new title: {new_title}")
                     # start title rename and send back status, success/failed
                     await self.handle_rename(recording_id, new_title)
+                    # send request to audit log service
+                    send_audit_event("RENAMED_RECORDING", "Renamed recording (and transcription if applicable).", {
+                        "recordingID": recording_id,
+                        "newTitle": new_title
+                    })
                 elif data.get("message") == "delete_recording":
                     logger.info("Received delete_recording control message.")
                     param_object = data.get("parameter")
@@ -641,6 +646,10 @@ class AudioDataConsumer(AsyncWebsocketConsumer):
                     logger.info(f"Deleting recording with recording ID: {recording_id}")
                     # start server task and send back status, success/failed
                     await self.handle_delete(recording_id)
+                    # send request to audit log service
+                    send_audit_event("DELETED_RECORDING", "Deleted recording (and transcription if applicable).", {
+                        "recordingID": recording_id
+                    })
                 elif data.get("message") == "save_mic_boost_level":
                     logger.info("Received save_mic_boost_level control message.")
                     param_object = data.get("parameter")
