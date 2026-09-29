@@ -709,7 +709,7 @@ const App = () => {
         const dataArray = new Uint8Array(analyserInstance.frequencyBinCount);
 
         function checkAudioLevel() {
-            console.debug("Running checkAudioLevel()");
+            //console.debug("Running checkAudioLevel()");
             analyserInstance.getByteFrequencyData(dataArray);
             const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
             //console.debug("Average: " + average);
